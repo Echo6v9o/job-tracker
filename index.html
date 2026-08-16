@@ -52,6 +52,22 @@ a{color:var(--primary);text-decoration:none}
 .qd-pos{color:#4b5563;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .qd-empty{padding:12px 14px;color:var(--muted);font-size:13px}
 .dup-hint{margin-top:6px;line-height:1.8}
+/* 城市多选组件 */
+#cityField{position:relative}
+.city-picker{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid #d6dce8;border-radius:9px;padding:5px 8px;background:#fff;cursor:text;min-height:38px;transition:border .15s, box-shadow .15s}
+.city-picker:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.city-picker input{border:0;padding:2px 4px;flex:1;min-width:100px;box-shadow:none;border-radius:6px;background:transparent}
+.city-picker input:focus{border-color:transparent;box-shadow:none}
+.cp-tag{display:inline-flex;align-items:center;gap:5px;background:var(--primary-soft);color:var(--primary);border-radius:999px;padding:2px 5px 2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.cp-tag button{border:0;background:rgba(79,70,229,.14);color:var(--primary);width:17px;height:17px;border-radius:50%;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.cp-tag button:hover{background:var(--primary);color:#fff}
+.cp-drop{position:absolute;top:calc(100% + 5px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 32px rgba(15,23,42,.18);z-index:30;max-height:224px;overflow:auto;display:none}
+.cp-drop.show{display:block}
+.cp-item{padding:9px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f1f4f9}
+.cp-item:last-child{border-bottom:0}
+.cp-item:hover{background:#f6f7ff}
+.cp-item.add{color:var(--primary);font-weight:600}
+.cp-empty{padding:11px 14px;color:var(--muted);font-size:12.5px}
 @keyframes rowFlash{0%,55%{background:#fde68a}100%{background:transparent}}
 tr.data-row.flash{animation:rowFlash 1.6s ease}
 .toolbar select{max-width:150px}
@@ -259,7 +275,13 @@ textarea{resize:vertical;min-height:64px}
         <div class="field"><div class="k"><b>*</b> 公司</div><input id="f_company" placeholder="如：字节跳动" required autocomplete="off"><div class="dup-hint small" id="dupHint"></div></div>
         <div class="field"><div class="k"><b>*</b> 岗位</div><input id="f_position" placeholder="如：前端开发工程师" required></div>
         <div class="field"><div class="k">岗位类型</div><select id="f_category"></select></div>
-        <div class="field"><div class="k">城市</div><input id="f_city" list="cityList" placeholder="选择或输入城市，如：北京 / 上海·杭州" autocomplete="off"></div>
+        <div class="field" id="cityField"><div class="k">城市（可多选）</div>
+          <div class="city-picker" id="cityPicker">
+            <div class="cp-tags" id="cpTags"></div>
+            <input id="f_city" placeholder="选择或输入城市" autocomplete="off">
+          </div>
+          <div class="cp-drop" id="cpDrop"></div>
+        </div>
         <div class="field"><div class="k">投递渠道</div><select id="f_channel"></select></div>
         <div class="field"><div class="k">投递日期</div><input id="f_applyDate" type="date"></div>
         <div class="field"><div class="k">当前状态</div><select id="f_status"></select><div class="small muted" style="margin-top:4px">测评 / 笔试因公司而异：可能只有其中一个、都有（先后不限）或都没有，按实际进度自由选择</div></div>
@@ -277,20 +299,6 @@ textarea{resize:vertical;min-height:64px}
     </form>
   </div>
 </div>
-
-<!-- 常见城市候选（可自由输入列表外的城市） -->
-<datalist id="cityList">
-  <option>北京</option><option>上海</option><option>深圳</option><option>杭州</option>
-  <option>广州</option><option>成都</option><option>南京</option><option>苏州</option>
-  <option>武汉</option><option>西安</option><option>长沙</option><option>重庆</option>
-  <option>合肥</option><option>天津</option><option>郑州</option><option>青岛</option>
-  <option>厦门</option><option>无锡</option><option>宁波</option><option>济南</option>
-  <option>大连</option><option>福州</option><option>昆明</option><option>贵阳</option>
-  <option>南昌</option><option>哈尔滨</option><option>沈阳</option><option>长春</option>
-  <option>石家庄</option><option>太原</option><option>南宁</option><option>兰州</option>
-  <option>海口</option><option>珠海</option><option>东莞</option><option>佛山</option>
-  <option>常州</option><option>嘉兴</option><option>绍兴</option><option>香港</option>
-</datalist>
 
 <!-- 云同步设置弹窗 -->
 <div class="modal-mask" id="syncMask">
@@ -344,6 +352,7 @@ const TERMINAL = new Set(['offer','rejected','declined']);
 const STALE_DAYS = 15;   // 流程连续多少天无进展，自动标记为已挂
 const CATEGORIES = ['技术研发','算法','测试/质量','产品','运营','市场/商业','设计','职能','其他'];
 const CHANNELS = ['公司官网','校园招聘','内推','BOSS直聘','牛客','实习僧','猎聘','其他'];
+const CITY_PRESETS = ['北京','上海','深圳','杭州','广州','成都','南京','苏州','武汉','西安','长沙','重庆','合肥','天津','郑州','青岛','厦门','无锡','宁波','济南','大连','福州','昆明','贵阳','南昌','哈尔滨','沈阳','长春','石家庄','太原','南宁','兰州','海口','珠海','东莞','佛山','常州','嘉兴','绍兴','香港'];
 
 /* ================= 工具函数 ================= */
 const $ = id => document.getElementById(id);
@@ -912,6 +921,51 @@ function bindBoard(){
   });
 }
 
+/* ================= 城市多选组件 ================= */
+let cityTags = [];   // 当前编辑中的城市标签
+
+function historyCities(){
+  const set = new Set();
+  state.records.forEach(r => String(r.city || '').split(/\s*[/、,，]\s*/).forEach(c => { if(c.trim()) set.add(c.trim()); }));
+  return [...set];
+}
+
+function renderCityTags(){
+  $('cpTags').innerHTML = cityTags.map(c =>
+    `<span class="cp-tag">${esc(c)}<button type="button" data-city="${esc(c)}" title="移除">✕</button></span>`
+  ).join('');
+}
+
+function renderCityDrop(){
+  const kw = $('f_city').value.trim();
+  const q = kw.toLowerCase();
+  const all = [...new Set([...historyCities(), ...CITY_PRESETS])].filter(c => !cityTags.includes(c));
+  const hits = kw ? all.filter(c => c.toLowerCase().includes(q)) : all;
+  let html = hits.slice(0, 20).map(c => `<div class="cp-item" data-city="${esc(c)}">${esc(c)}</div>`).join('');
+  if(kw && !all.some(c => c === kw) && !cityTags.includes(kw)){
+    html = `<div class="cp-item add" data-city="${esc(kw)}">＋ 添加「${esc(kw)}」</div>` + html;
+  }
+  $('cpDrop').innerHTML = html || '<div class="cp-empty">无匹配城市，直接回车可添加自定义城市</div>';
+  $('cpDrop').classList.add('show');
+}
+
+function closeCityDrop(){ $('cpDrop').classList.remove('show'); }
+
+function addCity(c){
+  c = String(c || '').trim();
+  if(!c || cityTags.includes(c)) return;
+  cityTags.push(c);
+  $('f_city').value = '';
+  renderCityTags();
+  renderCityDrop();   // 保持面板打开，方便连续多选
+}
+
+// 回车：添加浮层首项（无输入时为候选第一个，有自定义输入时为"添加「xx」"）
+function cityEnterKey(){
+  const first = document.querySelector('#cpDrop .cp-item');
+  if(first) addCity(first.dataset.city);
+}
+
 /* ================= 操作 ================= */
 function findRec(id){ return state.records.find(r => r.id === id); }
 
@@ -939,7 +993,7 @@ function openModal(id){
     $('f_company').value = r.company || '';
     $('f_position').value = r.position || '';
     $('f_category').value = r.category || CATEGORIES[0];
-    $('f_city').value = r.city || '';
+    cityTags = String(r.city || '').split(/\s*[/、,，]\s*/).map(s => s.trim()).filter(Boolean);
     $('f_channel').value = r.channel || CHANNELS[0];
     $('f_applyDate').value = r.applyDate || todayStr();
     $('f_status').value = r.status;
@@ -957,7 +1011,11 @@ function openModal(id){
     $('mTitle').textContent = '添加投递';
     $('mTimeline').style.display = 'none';
     $('f_status').value = 'applied';
+    cityTags = [];
   }
+  renderCityTags();
+  $('f_city').value = '';
+  closeCityDrop();
   $('mask').classList.add('show');
   setTimeout(() => $('f_company').focus(), 50);
 }
@@ -1194,6 +1252,45 @@ function bind(){
     }
   });
 
+  // 城市多选组件
+  $('cityPicker').addEventListener('click', e => {
+    const del = e.target.closest('.cp-tag button');
+    if(del){
+      cityTags = cityTags.filter(c => c !== del.dataset.city);
+      renderCityTags();
+      renderCityDrop();
+      return;
+    }
+    $('f_city').focus();
+  });
+  $('cpDrop').addEventListener('mousedown', e => e.preventDefault());   // 防止点击候选时输入框失焦闪烁
+  $('cpDrop').addEventListener('click', e => {
+    const item = e.target.closest('.cp-item');
+    if(item) addCity(item.dataset.city);
+  });
+  $('f_city').addEventListener('input', renderCityDrop);
+  $('f_city').addEventListener('focus', renderCityDrop);
+  $('f_city').addEventListener('click', renderCityDrop);   // 面板已关但输入框仍有焦点时，点击可重新打开
+  $('f_city').addEventListener('keydown', e => {
+    if(e.key === 'Enter'){
+      e.preventDefault();               // 阻止回车误提交表单
+      cityEnterKey();
+    }else if(e.key === 'Escape'){
+      e.stopPropagation();              // 先关候选面板，不关整个弹窗
+      closeCityDrop();
+    }else if(e.key === 'Backspace' && !$('f_city').value && cityTags.length){
+      cityTags.pop();                   // 输入框为空时退格删除最后一个标签
+      renderCityTags();
+      renderCityDrop();
+    }
+  });
+  document.addEventListener('click', e => {
+    // 选择城市候选时组件会立即重渲染，被点击的节点已脱离文档，
+    // 此时不视为"外部点击"，否则会误关候选面板
+    if(e.target && e.target.isConnected === false) return;
+    if(!e.target.closest('#cityField')) closeCityDrop();
+  });
+
   // 弹窗
   $('mClose').addEventListener('click', closeModal);
   $('mCancel').addEventListener('click', closeModal);
@@ -1208,7 +1305,7 @@ function bind(){
       company: $('f_company').value.trim(),
       position: $('f_position').value.trim(),
       category: $('f_category').value,
-      city: $('f_city').value.trim(),
+      city: cityTags.join(' / '),
       channel: $('f_channel').value,
       applyDate: $('f_applyDate').value || todayStr(),
       status: $('f_status').value,
