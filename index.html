@@ -194,6 +194,44 @@ textarea{resize:vertical;min-height:64px}
   .detail-grid{grid-template-columns:1fr}
   .form-grid{grid-template-columns:1fr}
 }
+
+/* ---------- 手机端适配 ---------- */
+@media (max-width:640px){
+  .container{padding:0 12px 40px}
+  .hero{padding:20px 0 62px}
+  .hero h1{font-size:20px}
+  .hero .sub{font-size:12px}
+  .stats-row{gap:9px;margin-top:-46px}
+  .stat-card{padding:10px 13px}
+  .stat-card .num{font-size:21px}
+  .stat-card .lbl{font-size:11px}
+  .up-chip{font-size:12px;padding:6px 11px}
+
+  /* 工具栏：搜索独占一行，筛选两列，按钮组自然换行 */
+  .toolbar{padding:10px;gap:8px}
+  .toolbar .search{width:100%}
+  .toolbar .search input{width:100%}
+  .toolbar select{flex:1 1 calc(50% - 6px);max-width:none;min-width:0}
+  .count-hint{order:99;width:100%;text-align:center}
+  .seg button{padding:8px 11px}
+  .btn{padding:8px 12px}
+
+  /* 表格：隐藏"类型/渠道"次要列，减小内距（展开详情仍可见全部信息） */
+  table{min-width:660px}
+  thead th,tbody td{padding:9px 8px}
+  th:nth-child(4),td:nth-child(4),
+  th:nth-child(6),td:nth-child(6){display:none}
+  .pager{min-width:660px;flex-direction:column;align-items:center}
+  .panel{padding:12px 14px}
+
+  /* 浮层不超出屏幕 */
+  .quick-drop{min-width:0;width:calc(100vw - 48px);max-width:420px}
+  .cp-drop{max-height:190px}
+
+  .modal-mask{padding:12px 10px}
+  .modal form{padding:12px 16px 16px}
+  .m-timeline{padding:11px 13px}
+}
 </style>
 </head>
 <body>
