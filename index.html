@@ -222,11 +222,34 @@ textarea{resize:vertical;min-height:64px}
   th:nth-child(4),td:nth-child(4),
   th:nth-child(6),td:nth-child(6){display:none}
   .pager{min-width:660px;flex-direction:column;align-items:center}
-  .panel{padding:12px 14px}
 
   /* 浮层不超出屏幕 */
-  .quick-drop{min-width:0;width:calc(100vw - 48px);max-width:420px}
+  /* 仪表盘：漏斗 / 分布 / 趋势 压缩排布 */
+  .panel{padding:12px 14px}
+  .panel h3{font-size:13px;margin-bottom:9px}
+  .funnel-row{gap:7px;margin-bottom:8px}
+  .funnel-row .fl{width:80px;font-size:12px}
+  .funnel-row .track{height:15px;border-radius:7px}
+  .funnel-row .fill{border-radius:7px}
+  .funnel-row .fv{width:auto;font-size:11px;white-space:nowrap}
+  .funnel-row .fv b{font-size:12px}
+  .funnel-row .fv .muted{font-size:10.5px}
+  .dist-row{gap:7px;margin-bottom:7px}
+  .dist-row .dl{width:60px;font-size:12px}
+  .dist-row .track{height:12px;border-radius:6px}
+  .dist-row .dv{width:42px;font-size:11.5px}
+  .trend{gap:3px;height:86px}
+  .trend .bar{max-width:22px;border-radius:4px 4px 2px 2px}
+  .trend .bar span{font-size:10px;top:-16px}
+  .trend .tl{font-size:9px}
+
+  /* 公司速查浮层：两行布局，防止公司名+岗位+状态挤在一行 */
+  .quick-drop{min-width:0;left:0;right:0;width:auto;max-width:none}
+  .qd-item{flex-wrap:wrap;gap:3px 8px;padding:9px 12px}
+  .qd-co{max-width:58%;overflow:hidden;text-overflow:ellipsis}
+  .qd-pos{flex-basis:100%;order:3;padding-left:2px}
   .cp-drop{max-height:190px}
+  .cp-item{padding:8px 12px;font-size:12.5px}
 
   .modal-mask{padding:12px 10px}
   .modal form{padding:12px 16px 16px}
@@ -773,10 +796,11 @@ function renderTrend(){
   for(let i = 13; i >= 0; i--) days.push(dstr(-i));
   const counts = days.map(d => state.records.filter(r => (r.applyDate || '') === d).length);
   const max = Math.max(1, ...counts);
+  const narrow = window.innerWidth <= 640;   // 手机窄屏隔天显示日期，避免拥挤
   $('trend').innerHTML = days.map((d, i) => `
     <div class="col">
       <div class="bar" style="height:${Math.max(3, counts[i] / max * 64)}px">${counts[i] ? `<span>${counts[i]}</span>` : ''}</div>
-      <div class="tl">${d.slice(5).replace('-', '/')}</div>
+      <div class="tl">${(!narrow || i % 2 === 1) ? d.slice(5).replace('-', '/') : ''}</div>
     </div>`).join('');
 }
 
@@ -1394,6 +1418,13 @@ if(Sync.enabled()){
 }else{
   autoRejectStale();
 }
+
+// 视口尺寸变化（如手机转屏、桌面拖窗口）时重新渲染，保证响应式模块正确排布
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(render, 250);
+});
 </script>
 </body>
 </html>
