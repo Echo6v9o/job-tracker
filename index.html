@@ -259,7 +259,7 @@ textarea{resize:vertical;min-height:64px}
         <div class="field"><div class="k"><b>*</b> 公司</div><input id="f_company" placeholder="如：字节跳动" required autocomplete="off"><div class="dup-hint small" id="dupHint"></div></div>
         <div class="field"><div class="k"><b>*</b> 岗位</div><input id="f_position" placeholder="如：前端开发工程师" required></div>
         <div class="field"><div class="k">岗位类型</div><select id="f_category"></select></div>
-        <div class="field"><div class="k">城市</div><input id="f_city" placeholder="如：北京 / 上海·杭州"></div>
+        <div class="field"><div class="k">城市</div><input id="f_city" list="cityList" placeholder="选择或输入城市，如：北京 / 上海·杭州" autocomplete="off"></div>
         <div class="field"><div class="k">投递渠道</div><select id="f_channel"></select></div>
         <div class="field"><div class="k">投递日期</div><input id="f_applyDate" type="date"></div>
         <div class="field"><div class="k">当前状态</div><select id="f_status"></select><div class="small muted" style="margin-top:4px">测评 / 笔试因公司而异：可能只有其中一个、都有（先后不限）或都没有，按实际进度自由选择</div></div>
@@ -277,6 +277,20 @@ textarea{resize:vertical;min-height:64px}
     </form>
   </div>
 </div>
+
+<!-- 常见城市候选（可自由输入列表外的城市） -->
+<datalist id="cityList">
+  <option>北京</option><option>上海</option><option>深圳</option><option>杭州</option>
+  <option>广州</option><option>成都</option><option>南京</option><option>苏州</option>
+  <option>武汉</option><option>西安</option><option>长沙</option><option>重庆</option>
+  <option>合肥</option><option>天津</option><option>郑州</option><option>青岛</option>
+  <option>厦门</option><option>无锡</option><option>宁波</option><option>济南</option>
+  <option>大连</option><option>福州</option><option>昆明</option><option>贵阳</option>
+  <option>南昌</option><option>哈尔滨</option><option>沈阳</option><option>长春</option>
+  <option>石家庄</option><option>太原</option><option>南宁</option><option>兰州</option>
+  <option>海口</option><option>珠海</option><option>东莞</option><option>佛山</option>
+  <option>常州</option><option>嘉兴</option><option>绍兴</option><option>香港</option>
+</datalist>
 
 <!-- 云同步设置弹窗 -->
 <div class="modal-mask" id="syncMask">
