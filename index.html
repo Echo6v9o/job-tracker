@@ -797,12 +797,11 @@ function renderTrend(){
   for(let i = span - 1; i >= 0; i--) days.push(dstr(-i));
   const counts = days.map(d => state.records.filter(r => (r.applyDate || '') === d).length);
   const max = Math.max(1, ...counts);
-  const everyOther = span > 7;   // 列数多时隔天显示日期
   $('trendTitle').textContent = `近 ${span} 天投递趋势`;
   $('trend').innerHTML = days.map((d, i) => `
     <div class="col">
       <div class="bar" style="height:${Math.max(3, counts[i] / max * 64)}px">${counts[i] ? `<span>${counts[i]}</span>` : ''}</div>
-      <div class="tl">${(!everyOther || i % 2 === 1) ? d.slice(5).replace('-', '/') : ''}</div>
+      <div class="tl">${d.slice(5).replace('-', '/')}</div>
     </div>`).join('');
 }
 
