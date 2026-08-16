@@ -238,10 +238,10 @@ textarea{resize:vertical;min-height:64px}
   .dist-row .dl{width:60px;font-size:12px}
   .dist-row .track{height:12px;border-radius:6px}
   .dist-row .dv{width:42px;font-size:11.5px}
-  .trend{gap:3px;height:86px}
-  .trend .bar{max-width:22px;border-radius:4px 4px 2px 2px}
+  .trend{gap:4px;height:86px}
+  .trend .bar{max-width:30px;border-radius:4px 4px 2px 2px}
   .trend .bar span{font-size:10px;top:-16px}
-  .trend .tl{font-size:9px}
+  .trend .tl{font-size:9.5px}
 
   /* 公司速查浮层：两行布局，防止公司名+岗位+状态挤在一行 */
   .quick-drop{min-width:0;left:0;right:0;width:auto;max-width:none}
@@ -308,7 +308,7 @@ textarea{resize:vertical;min-height:64px}
   <div class="dash-grid">
     <div class="panel"><h3>转化漏斗</h3><div id="funnel"></div></div>
     <div class="panel"><h3>状态分布</h3><div id="dist"></div></div>
-    <div class="panel" style="grid-column:1/-1"><h3>近 14 天投递趋势</h3><div class="trend" id="trend"></div></div>
+    <div class="panel" style="grid-column:1/-1"><h3 id="trendTitle">近 14 天投递趋势</h3><div class="trend" id="trend"></div></div>
   </div>
 
   <div id="listWrap" class="list-card"></div>
@@ -792,15 +792,17 @@ function renderDist(){
 }
 
 function renderTrend(){
+  const span = window.innerWidth <= 640 ? 7 : 14;   // 手机窄屏只看最近 7 天，避免柱状图挤压
   const days = [];
-  for(let i = 13; i >= 0; i--) days.push(dstr(-i));
+  for(let i = span - 1; i >= 0; i--) days.push(dstr(-i));
   const counts = days.map(d => state.records.filter(r => (r.applyDate || '') === d).length);
   const max = Math.max(1, ...counts);
-  const narrow = window.innerWidth <= 640;   // 手机窄屏隔天显示日期，避免拥挤
+  const everyOther = span > 7;   // 列数多时隔天显示日期
+  $('trendTitle').textContent = `近 ${span} 天投递趋势`;
   $('trend').innerHTML = days.map((d, i) => `
     <div class="col">
       <div class="bar" style="height:${Math.max(3, counts[i] / max * 64)}px">${counts[i] ? `<span>${counts[i]}</span>` : ''}</div>
-      <div class="tl">${(!narrow || i % 2 === 1) ? d.slice(5).replace('-', '/') : ''}</div>
+      <div class="tl">${(!everyOther || i % 2 === 1) ? d.slice(5).replace('-', '/') : ''}</div>
     </div>`).join('');
 }
 
