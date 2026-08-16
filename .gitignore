@@ -1,0 +1,8 @@
+# 本机专用文件，不进入开源仓库
+icon.ico
+make-shortcut.ps1
+发布指南.md
+server.log
+data.json
+.DS_Store
+Thumbs.db
