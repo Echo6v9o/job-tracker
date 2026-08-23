@@ -299,7 +299,7 @@ textarea{resize:vertical;min-height:64px}
       <div class="update-detail" id="updateDetail"></div>
     </div>
     <div class="update-actions">
-      <a class="update-link" id="updateLink" target="_blank" rel="noopener noreferrer">查看更新</a>
+      <a class="update-link" id="updateLink" target="_blank" rel="noopener noreferrer">查看项目更新</a>
       <button class="update-dismiss" id="updateDismiss" type="button">知道了</button>
     </div>
   </div>
@@ -426,7 +426,6 @@ const STORAGE_KEY = 'qiuzhao.tracker.v1';
 const APP_VERSION = 'v1.0.0';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
-const APP_RELEASES_URL = `${APP_REPOSITORY_URL}/releases`;
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
 const UPDATE_DISMISSED_KEY = `${STORAGE_KEY}.update-dismissed`;
 // 测评与笔试相互独立：有的公司只有其一、有的都有（先后顺序也不固定）、有的都没有，可自由选择切换
@@ -546,7 +545,7 @@ function renderUpdateBanner(){
   if(!shouldShow) return;
   $('updateTitle').textContent = `发现新版本 ${latest}`;
   $('updateDetail').textContent = `当前版本 ${versionLabel(APP_VERSION)}，项目已有更新，建议下载最新版本。`;
-  $('updateLink').href = APP_RELEASES_URL;
+  $('updateLink').href = APP_REPOSITORY_URL;
 }
 let updateState = {
   latestVersion: '',
