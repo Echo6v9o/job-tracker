@@ -36,6 +36,17 @@ a{color:var(--primary);text-decoration:none}
 .up-chip .date{font-weight:700;color:var(--primary)}
 .up-chip.soon{border-color:#fca5a5;background:#fef2f2}
 .up-chip.soon .date{color:#dc2626}
+.update-banner{display:none;align-items:center;gap:12px;margin-top:16px;padding:13px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);box-shadow:var(--shadow);color:#1e3a8a}
+.update-banner.show{display:flex}
+.update-banner .update-icon{width:30px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#dbeafe;border-radius:9px;font-size:17px}
+.update-banner .update-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.update-banner .update-title{font-weight:700;font-size:13.5px}
+.update-banner .update-detail{font-size:12px;color:#3b5b91;line-height:1.5}
+.update-banner .update-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.update-banner .update-link,.update-banner .update-dismiss{border:0;border-radius:8px;padding:7px 11px;font:inherit;font-size:12.5px;cursor:pointer}
+.update-banner .update-link{background:#2563eb;color:#fff}
+.update-banner .update-dismiss{background:rgba(37,99,235,.09);color:#1d4ed8}
+.update-banner .update-link:hover,.update-banner .update-dismiss:hover{filter:brightness(.96)}
 
 /* ---------- 工具栏 ---------- */
 .toolbar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:16px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
@@ -206,6 +217,9 @@ textarea{resize:vertical;min-height:64px}
   .stat-card .num{font-size:21px}
   .stat-card .lbl{font-size:11px}
   .up-chip{font-size:12px;padding:6px 11px}
+  .update-banner{align-items:flex-start;flex-wrap:wrap;padding:12px}
+  .update-banner .update-copy{flex-basis:calc(100% - 44px)}
+  .update-banner .update-actions{width:100%;padding-left:42px}
 
   /* 工具栏：搜索独占一行，筛选两列，按钮组自然换行 */
   .toolbar{padding:10px;gap:8px}
@@ -278,6 +292,18 @@ textarea{resize:vertical;min-height:64px}
     <div class="stat-card"><div class="num" id="s_rej" style="color:#dc2626">0</div><div class="lbl">已挂</div></div>
   </div>
 
+  <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
+    <div class="update-icon">↗</div>
+    <div class="update-copy">
+      <div class="update-title" id="updateTitle">发现新版本</div>
+      <div class="update-detail" id="updateDetail"></div>
+    </div>
+    <div class="update-actions">
+      <a class="update-link" id="updateLink" target="_blank" rel="noopener noreferrer">查看更新</a>
+      <button class="update-dismiss" id="updateDismiss" type="button">知道了</button>
+    </div>
+  </div>
+
   <div class="upcoming" id="upcoming"></div>
 
   <div class="toolbar">
@@ -317,6 +343,7 @@ textarea{resize:vertical;min-height:64px}
 
   <footer>
     <span id="staleRule"></span><br>
+    当前版本 <b id="appVersion"></b> ·
     数据默认保存在本机浏览器（localStorage）；配置 <b>☁️ 云同步</b> 后保存在你自己的 GitHub 私有仓库，手机 / 电脑多端自动同步。清除浏览器缓存前，请先「📤 导出」备份。<br>
     <button class="lnk" id="btnDemo">加载示例数据</button> ·
     <button class="lnk" id="btnClear">清空全部数据</button>
@@ -396,6 +423,12 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
+const APP_VERSION = 'v1.0.0';
+const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
+const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
+const APP_RELEASES_URL = `${APP_REPOSITORY_URL}/releases`;
+const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
+const UPDATE_DISMISSED_KEY = `${STORAGE_KEY}.update-dismissed`;
 // 测评与笔试相互独立：有的公司只有其一、有的都有（先后顺序也不固定）、有的都没有，可自由选择切换
 const STATUSES = [
   {key:'applied',    label:'已投递',    color:'#64748b'},
@@ -457,6 +490,97 @@ function download(content, filename, type){
 // 曾到达过某个阶段（根据历史 + 当前状态判断，被挂的也算到达过）
 function reached(r, keys){
   return keys.some(k => r.status === k || (r.history || []).some(h => h.status === k));
+}
+
+/* ================= 版本更新检查 =================
+ * 当前页面携带 APP_VERSION，远端 main 分支的 index.html 作为最新版本来源。
+ * 只提示比当前版本更新的版本；网络异常时保持静默，不影响看板使用。 */
+const VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/i;
+function parseVersion(version){
+  const m = String(version ?? '').trim().match(VERSION_PATTERN);
+  if(!m) return null;
+  return {major: +m[1], minor: +m[2], patch: +m[3], pre: m[4] ? m[4].split('.') : []};
+}
+function versionLabel(version){
+  const v = parseVersion(version);
+  if(!v) return '';
+  return `v${v.major}.${v.minor}.${v.patch}${v.pre.length ? '-' + v.pre.join('.') : ''}`;
+}
+function compareVersions(a, b){
+  const av = parseVersion(a), bv = parseVersion(b);
+  if(!av || !bv) return null;
+  for(const key of ['major', 'minor', 'patch']){
+    if(av[key] !== bv[key]) return av[key] > bv[key] ? 1 : -1;
+  }
+  if(!av.pre.length && !bv.pre.length) return 0;
+  if(!av.pre.length) return 1;
+  if(!bv.pre.length) return -1;
+  const len = Math.max(av.pre.length, bv.pre.length);
+  for(let i = 0; i < len; i++){
+    if(i >= av.pre.length) return -1;
+    if(i >= bv.pre.length) return 1;
+    const ai = av.pre[i], bi = bv.pre[i];
+    if(ai === bi) continue;
+    const an = /^\d+$/.test(ai), bn = /^\d+$/.test(bi);
+    if(an && bn) return +ai > +bi ? 1 : -1;
+    if(an !== bn) return an ? -1 : 1;
+    return ai > bi ? 1 : -1;
+  }
+  return 0;
+}
+function loadDismissedVersion(){
+  try{ return localStorage.getItem(UPDATE_DISMISSED_KEY) || ''; }catch(e){ return ''; }
+}
+function dismissUpdate(){
+  if(!updateState.latestVersion) return;
+  updateState.dismissedVersion = updateState.latestVersion;
+  try{ localStorage.setItem(UPDATE_DISMISSED_KEY, updateState.dismissedVersion); }catch(e){ /* 忽略隐私模式限制 */ }
+  renderUpdateBanner();
+}
+function renderUpdateBanner(){
+  const banner = $('updateBanner');
+  if(!banner) return;
+  const latest = updateState.latestVersion;
+  const shouldShow = !!latest && compareVersions(latest, APP_VERSION) > 0 && updateState.dismissedVersion !== latest;
+  banner.classList.toggle('show', shouldShow);
+  if(!shouldShow) return;
+  $('updateTitle').textContent = `发现新版本 ${latest}`;
+  $('updateDetail').textContent = `当前版本 ${versionLabel(APP_VERSION)}，项目已有更新，建议下载最新版本。`;
+  $('updateLink').href = APP_RELEASES_URL;
+}
+let updateState = {
+  latestVersion: '',
+  dismissedVersion: loadDismissedVersion(),
+  lastCheckedAt: 0,
+  request: null,
+};
+async function checkForUpdates(force = false){
+  const now = Date.now();
+  if(updateState.request) return updateState.request;
+  if(!force && now - updateState.lastCheckedAt < APP_UPDATE_CHECK_INTERVAL) return false;
+  updateState.lastCheckedAt = now;
+  updateState.request = (async () => {
+    try{
+      const res = await fetch(`${APP_UPDATE_SOURCE_URL}?check=${Date.now()}`, {cache: 'no-store'});
+      if(!res.ok) return false;
+      const html = await res.text();
+      const m = html.match(/const\s+APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+      const latest = versionLabel(m && m[1]);
+      if(!latest || compareVersions(latest, APP_VERSION) <= 0){
+        updateState.latestVersion = '';
+        renderUpdateBanner();
+        return false;
+      }
+      updateState.latestVersion = latest;
+      renderUpdateBanner();
+      return true;
+    }catch(e){
+      return false;
+    }finally{
+      updateState.request = null;
+    }
+  })();
+  return updateState.request;
 }
 
 /* ================= 状态 ================= */
@@ -1169,6 +1293,9 @@ function importJSON(file){
 
 /* ================= 事件绑定 ================= */
 function bind(){
+  $('appVersion').textContent = APP_VERSION;
+  $('updateDismiss').addEventListener('click', dismissUpdate);
+
   // 下拉选项填充
   $('fStatus').innerHTML += STATUSES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
   $('fCategory').innerHTML += CATEGORIES.map(c => `<option>${c}</option>`).join('');
@@ -1403,6 +1530,11 @@ Sync.loadCfg();
 bind();
 $('staleRule').textContent = `⏰ 自动挂起规则：流程超过 ${STALE_DAYS} 天无进展、且没有未来笔试/面试安排的记录，打开页面时会自动标记为已挂（如误判可直接改回状态）`;
 render();
+checkForUpdates();
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') checkForUpdates();
+});
+setInterval(checkForUpdates, APP_UPDATE_CHECK_INTERVAL);
 if(Sync.enabled()){
   // 首次打开：拉取云端最新数据后再做自动挂起判定
   ghPull().then(changed => {
