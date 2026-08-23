@@ -99,7 +99,7 @@ tr.data-row.flash{animation:rowFlash 1.6s ease}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
 .panel h3{margin:0 0 12px;font-size:14px;color:#374151}
 .funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.funnel-row .fl{width:104px;font-size:12.5px;color:var(--muted);text-align:right;flex-shrink:0}
+.funnel-row .fl{width:140px;font-size:12.5px;color:var(--muted);text-align:right;flex-shrink:0}
 .funnel-row .track{flex:1;height:18px;background:#f1f4f9;border-radius:9px;overflow:hidden}
 .funnel-row .fill{height:100%;border-radius:9px;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width .4s}
 .funnel-row .fv{width:92px;font-size:12.5px;flex-shrink:0}
@@ -242,7 +242,7 @@ textarea{resize:vertical;min-height:64px}
   .panel{padding:12px 14px}
   .panel h3{font-size:13px;margin-bottom:9px}
   .funnel-row{gap:7px;margin-bottom:8px}
-  .funnel-row .fl{width:80px;font-size:12px}
+  .funnel-row .fl{width:110px;font-size:12px}
   .funnel-row .track{height:15px;border-radius:7px}
   .funnel-row .fill{border-radius:7px}
   .funnel-row .fv{width:auto;font-size:11px;white-space:nowrap}
@@ -372,7 +372,7 @@ textarea{resize:vertical;min-height:64px}
         </div>
         <div class="field"><div class="k">投递渠道</div><select id="f_channel"></select></div>
         <div class="field"><div class="k">投递日期</div><input id="f_applyDate" type="date"></div>
-        <div class="field"><div class="k">当前状态</div><select id="f_status"></select><div class="small muted" style="margin-top:4px">测评 / 笔试因公司而异：可能只有其中一个、都有（先后不限）或都没有，按实际进度自由选择</div></div>
+        <div class="field"><div class="k">当前状态</div><select id="f_status"></select><div class="small muted" style="margin-top:4px">测评 / 笔试 / AI面因公司而异：可能只有其中一项、都有（先后不限）或都没有，按实际进度自由选择</div></div>
         <div class="field"><div class="k">下一步安排（笔试/面试时间）</div><input id="f_nextTime" type="datetime-local"></div>
         <div class="field"><div class="k">薪资（期望 / Offer）</div><input id="f_salary" placeholder="如：25k×15"></div>
         <div class="field"><div class="k">投递链接</div><input id="f_link" type="url" placeholder="https://…"></div>
@@ -423,16 +423,17 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.1.0';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
 const UPDATE_DISMISSED_KEY = `${STORAGE_KEY}.update-dismissed`;
-// 测评与笔试相互独立：有的公司只有其一、有的都有（先后顺序也不固定）、有的都没有，可自由选择切换
+// 测评、笔试与 AI 面相互独立：有的公司只有其中一项、有的都有（先后顺序也不固定）、有的都没有，可自由选择切换
 const STATUSES = [
   {key:'applied',    label:'已投递',    color:'#64748b'},
   {key:'assessment', label:'测评',      color:'#0ea5e9'},
   {key:'test',       label:'笔试',      color:'#2563eb'},
+  {key:'ai',         label:'AI面',      color:'#6366f1'},
   {key:'interview1', label:'一面',      color:'#7c3aed'},
   {key:'interview2', label:'二面',      color:'#7c3aed'},
   {key:'interview3', label:'三面',      color:'#7c3aed'},
@@ -441,7 +442,13 @@ const STATUSES = [
   {key:'rejected',   label:'已挂',      color:'#dc2626'},
   {key:'declined',   label:'已放弃',    color:'#94a3b8'},
 ];
+const STATUS_ORDER = new Map(STATUSES.map((s, i) => [s.key, i]));
 const TERMINAL = new Set(['offer','rejected','declined']);
+const HISTORICAL_FUNNEL_STATUSES = new Set(['rejected','declined']);
+const FUNNEL_EVAL_KEYS = ['assessment','test','ai','interview1','interview2','interview3','hr','offer'];
+const FUNNEL_INTERVIEW_KEYS = ['interview1','interview2','interview3','hr','offer'];
+const FUNNEL_EVAL_STATUSES = new Set(FUNNEL_EVAL_KEYS);
+const FUNNEL_INTERVIEW_STATUSES = new Set(FUNNEL_INTERVIEW_KEYS);
 const STALE_DAYS = 15;   // 流程连续多少天无进展，自动标记为已挂
 const CATEGORIES = ['技术研发','算法','测试/质量','产品','运营','市场/商业','设计','职能','其他'];
 const CHANNELS = ['公司官网','校园招聘','内推','BOSS直聘','牛客','实习僧','猎聘','其他'];
@@ -486,11 +493,10 @@ function download(content, filename, type){
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }
-// 曾到达过某个阶段（根据历史 + 当前状态判断，被挂的也算到达过）
+// 终态记录保留曾经到达过的漏斗阶段，避免已挂/已放弃后转化数据归零
 function reached(r, keys){
   return keys.some(k => r.status === k || (r.history || []).some(h => h.status === k));
 }
-
 /* ================= 版本更新检查 =================
  * 当前页面携带 APP_VERSION，远端 main 分支的 index.html 作为最新版本来源。
  * 只提示比当前版本更新的版本；网络异常时保持静默，不影响看板使用。 */
@@ -720,11 +726,7 @@ function autoRejectStale(){
       : (r.updatedAt || Date.now());
     if(isNaN(last)) return;
     if(now - last >= STALE_DAYS * 864e5){
-      r.status = 'rejected';
-      (r.history = r.history || []).push({
-        status: 'rejected', time: nowStr(), note: `⏰ 超 ${STALE_DAYS} 天无进展，自动标记（如有误可改回）`
-      });
-      r.updatedAt = Date.now();
+      setRecordStatus(r, 'rejected', `⏰ 超 ${STALE_DAYS} 天无进展，自动标记（如有误可改回）`);
       changed.push(`${r.company}-${r.position}`);
     }
   });
@@ -848,7 +850,7 @@ function renderHero(){
 
 function renderStats(){
   const rs = state.records;
-  const interviewing = new Set(['interview1','interview2','interview3','hr']);
+  const interviewing = new Set(['ai','interview1','interview2','interview3','hr']);
   $('s_total').textContent = rs.length;
   $('s_active').textContent = rs.filter(r => !TERMINAL.has(r.status)).length;
   $('s_interview').textContent = rs.filter(r => interviewing.has(r.status)).length;
@@ -879,12 +881,17 @@ function renderUpcoming(){
 function renderFunnel(){
   const total = state.records.length || 1;
   const n = state.records.length;
-  const nEval = state.records.filter(r => reached(r, ['assessment','test','interview1','interview2','interview3','hr','offer'])).length;
-  const nItv = state.records.filter(r => reached(r, ['interview1','interview2','interview3','hr','offer'])).length;
-  const nOffer = state.records.filter(r => reached(r, ['offer'])).length;
+  // 进行中记录按当前状态统计；已挂/已放弃记录保留历史已到达阶段
+  const nEval = state.records.filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
+    ? reached(r, FUNNEL_EVAL_KEYS)
+    : FUNNEL_EVAL_STATUSES.has(r.status)).length;
+  const nItv = state.records.filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
+    ? reached(r, FUNNEL_INTERVIEW_KEYS)
+    : FUNNEL_INTERVIEW_STATUSES.has(r.status)).length;
+  const nOffer = state.records.filter(r => r.status === 'offer').length;
   const rows = [
     ['投递', n, '#6366f1'],
-    ['进入测评/笔试', nEval, '#0ea5e9'],
+    ['进入测评/笔试/AI面', nEval, '#0ea5e9'],
     ['进入面试', nItv, '#8b5cf6'],
     ['拿到 Offer', nOffer, '#10b981'],
   ];
@@ -1004,7 +1011,7 @@ function renderList(){
         <td class="small">${esc(r.channel || '—')}</td>
         <td class="small">${esc(r.applyDate || '—')}</td>
         <td>
-          <select class="status-sel" data-status-sel="${r.id}" title="自由切换状态：测评/笔试可有可无、先后不限"
+          <select class="status-sel" data-status-sel="${r.id}" title="可前进或回退状态；回退会清除后续状态历史"
             style="color:${st.color};border-color:${st.color}77;background:${st.color}14">
             ${STATUSES.map(s => `<option value="${s.key}"${s.key === r.status ? ' selected' : ''}>● ${s.label}</option>`).join('')}
           </select>
@@ -1155,13 +1162,38 @@ function cityEnterKey(){
 /* ================= 操作 ================= */
 function findRec(id){ return state.records.find(r => r.id === id); }
 
+function historyAfterStatusChange(r, key, note){
+  const history = Array.isArray(r.history) ? r.history : [];
+  const targetIndex = history.map(h => h.status).lastIndexOf(key);
+  if(targetIndex >= 0){
+    const next = history.slice(0, targetIndex + 1);
+    next[targetIndex] = {...next[targetIndex], time: nowStr(), note: note || ''};
+    return next;
+  }
+  const targetOrder = STATUS_ORDER.get(key);
+  const next = targetOrder === undefined
+    ? history.slice()
+    : history.filter(h => {
+        const order = STATUS_ORDER.get(h.status);
+        return order === undefined || order <= targetOrder;
+      });
+  next.push({status: key, time: nowStr(), note: note || ''});
+  return next;
+}
+
+function setRecordStatus(r, key, note = ''){
+  if(!r || r.status === key) return false;
+  r.history = historyAfterStatusChange(r, key, note);
+  r.status = key;
+  r.updatedAt = Date.now();
+  return true;
+}
+
 function changeStatus(id, key){
   const r = findRec(id);
   if(!r || r.status === key) return;
   const st = statusByKey(key);
-  r.status = key;
-  r.updatedAt = Date.now();
-  (r.history = r.history || []).push({status: key, time: nowStr(), note: ''});
+  setRecordStatus(r, key);
   save(); render();
   toast(`${r.company} → ${st.label}`);
 }
@@ -1509,8 +1541,8 @@ function bind(){
     if(id){
       const r = findRec(id);
       const old = r.status;
-      Object.assign(r, data, {updatedAt: Date.now()});
-      if(data.status !== old) r.history.push({status: data.status, time: nowStr(), note: ''});
+      Object.assign(r, data, {status: old, updatedAt: Date.now()});
+      if(data.status !== old) setRecordStatus(r, data.status);
       toast('已保存修改');
     }else{
       state.records.unshift({
