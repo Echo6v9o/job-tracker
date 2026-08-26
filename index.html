@@ -62,6 +62,20 @@ a{color:var(--primary);text-decoration:none}
 .qd-co{font-weight:600;white-space:nowrap}
 .qd-pos{color:#4b5563;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .qd-empty{padding:12px 14px;color:var(--muted);font-size:13px}
+.qd-company-state{padding:10px 14px;background:#fff7ed;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:12.5px}
+.qd-company-state .qd-state-main{display:flex;align-items:center;gap:6px;min-width:0}
+.qd-company-state .qd-state-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qd-company-state .qd-state-meta{margin-top:4px;color:#b45309;font-size:11.5px}
+.qd-company-state .qd-state-actions{display:flex;gap:6px;margin-top:7px}
+.qd-company-state button,.company-flag-hint button{border:0;border-radius:6px;padding:3px 7px;background:#ffedd5;color:#9a3412;font:inherit;font-size:11.5px;cursor:pointer}
+.qd-company-state button:hover,.company-flag-hint button:hover{background:#fed7aa}
+.qd-company-action{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid #f1f4f9;background:#f8fafc;color:#475569;font-size:12px}
+.qd-company-action button{border:0;border-radius:6px;padding:5px 8px;background:var(--primary-soft);color:var(--primary);font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.qd-company-action button:hover{filter:brightness(.97)}
+.company-flag-badge{display:inline-flex;align-items:center;margin-left:6px;padding:2px 6px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:10.5px;font-weight:600;vertical-align:middle;white-space:nowrap}
+.company-flag-hint{margin-bottom:6px;padding:7px 9px;border-radius:8px;background:#fff7ed;color:#9a3412;line-height:1.7}
+.company-flag-hint .flag-main{display:flex;align-items:center;gap:5px}
+.company-flag-hint .flag-meta{font-size:11.5px;color:#b45309}
 .dup-hint{margin-top:6px;line-height:1.8}
 /* 城市多选组件 */
 #cityField{position:relative}
@@ -307,7 +321,7 @@ textarea{resize:vertical;min-height:64px}
   <div class="upcoming" id="upcoming"></div>
 
   <div class="toolbar">
-    <div class="search"><input id="q" type="text" placeholder="搜索公司 / 岗位 / 备注（输公司名速查状态）" autocomplete="off"><div class="quick-drop" id="quickDrop"></div></div>
+    <div class="search"><input id="q" type="text" placeholder="搜索公司 / 岗位 / 备注（输入公司名可标记暂无合适岗位）" autocomplete="off"><div class="quick-drop" id="quickDrop"></div></div>
     <select id="fStatus"><option value="">全部状态</option></select>
     <select id="fCategory"><option value="">全部类型</option></select>
     <select id="fChannel"><option value="">全部渠道</option></select>
@@ -423,7 +437,7 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
@@ -591,6 +605,7 @@ async function checkForUpdates(force = false){
 /* ================= 状态 ================= */
 let state = {
   records: [],
+  companyFlags: [],
   view: 'list',
   search: '', fStatus: '', fCategory: '', fChannel: '', sort: 'applyDesc',
   page: 1, pageSize: 20,
@@ -598,6 +613,84 @@ let state = {
   expandedId: null,
   savedAt: 0,          // 数据版本时间戳，用于多端同步比较
 };
+
+/* ================= 公司级标记 ================= */
+function normalizeCompanyName(name){
+  return String(name ?? '').trim().toLowerCase().replace(/\s+/g, '');
+}
+function normalizeCompanyFlags(flags){
+  const seen = new Set();
+  return (Array.isArray(flags) ? flags : []).map(f => {
+    const raw = f || {};
+    const company = String(raw.company || raw.name || raw.key || '').trim();
+    const key = normalizeCompanyName(raw.key || company);
+    if(!key || seen.has(key)) return null;
+    seen.add(key);
+    return {
+      id: raw.id || `cf_${uid()}`,
+      key,
+      company,
+      status: 'no-suitable-role',
+      note: String(raw.note || ''),
+      createdAt: raw.createdAt || Date.now(),
+      updatedAt: raw.updatedAt || raw.createdAt || Date.now(),
+    };
+  }).filter(Boolean);
+}
+function findCompanyFlag(company){
+  const key = normalizeCompanyName(company);
+  return key && Array.isArray(state.companyFlags)
+    ? state.companyFlags.find(f => f.key === key)
+    : null;
+}
+function matchingCompanyFlags(query){
+  const key = normalizeCompanyName(query);
+  if(!key || !Array.isArray(state.companyFlags)) return [];
+  return state.companyFlags
+    .filter(f => f.key.includes(key) || key.includes(f.key))
+    .slice(0, 6);
+}
+function companyFlagBadge(company){
+  const flag = findCompanyFlag(company);
+  if(!flag) return '';
+  const title = flag.note ? `暂无合适岗位：${flag.note}` : '暂无合适岗位';
+  return `<span class="company-flag-badge" title="${esc(title)}">🏢 暂无合适岗位</span>`;
+}
+function markCompanyNoSuitable(company){
+  const name = String(company ?? '').trim();
+  const key = normalizeCompanyName(name);
+  if(!key) return;
+  if(findCompanyFlag(name)){ toast('该公司已经标记为暂无合适岗位'); return; }
+  state.companyFlags.unshift({
+    id: `cf_${uid()}`, key, company: name, status: 'no-suitable-role', note: '',
+    createdAt: Date.now(), updatedAt: Date.now(),
+  });
+  save(); render(); renderQuickDrop(); renderDupHint();
+  toast(`已标记「${name}」暂无合适岗位`);
+}
+function unmarkCompany(company){
+  const flag = findCompanyFlag(company);
+  if(!flag) return;
+  if(!confirm(`取消「${flag.company}」的暂无合适岗位标记？`)) return;
+  state.companyFlags = state.companyFlags.filter(f => f.key !== flag.key);
+  save(); render(); renderQuickDrop(); renderDupHint();
+  toast(`已取消「${flag.company}」标记`);
+}
+function editCompanyFlagNote(company){
+  const flag = findCompanyFlag(company);
+  if(!flag) return;
+  const note = prompt(`修改「${flag.company}」的备注（可留空）`, flag.note || '');
+  if(note === null) return;
+  flag.note = note.trim();
+  flag.updatedAt = Date.now();
+  save(); render(); renderQuickDrop(); renderDupHint();
+  toast('公司标记备注已更新');
+}
+function handleCompanyAction(action, company){
+  if(action === 'mark') markCompanyNoSuitable(company);
+  else if(action === 'unmark') unmarkCompany(company);
+  else if(action === 'note') editCompanyFlagNote(company);
+}
 
 /* ================= 云同步（GitHub 私有仓库） =================
  * 数据文件 data.json 存在用户自己的私有仓库中：
@@ -648,6 +741,7 @@ async function ghPull(){
     const data = JSON.parse(b64decode(d.content));
     if(Array.isArray(data.records) && (data.savedAt || 0) > (state.savedAt || 0)){
       state.records = data.records;
+      state.companyFlags = normalizeCompanyFlags(data.companyFlags);
       if(data.view === 'board' || data.view === 'list') state.view = data.view;
       state.savedAt = data.savedAt;
       state.page = 1;
@@ -664,9 +758,11 @@ async function ghPush(){
   if(!Sync.enabled()) return;
   state.savedAt = Date.now();
   persistLocal();
-  const content = b64encode(JSON.stringify({ records: state.records, view: state.view, savedAt: state.savedAt }));
+  const content = b64encode(JSON.stringify({
+    records: state.records, companyFlags: state.companyFlags, view: state.view, savedAt: state.savedAt,
+  }));
   const doPut = async sha => {
-    const payload = { message: `更新投递记录 ${nowStr()}`, content };
+    const payload = { message: `更新投递记录与公司标记 ${nowStr()}`, content };
     if(sha) payload.sha = sha;
     return fetch(Sync.dataUrl(), { method: 'PUT', headers: Sync.headers(), body: JSON.stringify(payload) });
   };
@@ -689,7 +785,7 @@ async function ghPush(){
 function persistLocal(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      records: state.records, view: state.view, savedAt: state.savedAt || Date.now(),
+      records: state.records, companyFlags: state.companyFlags, view: state.view, savedAt: state.savedAt || Date.now(),
     }));
   }catch(e){ /* 存储已满等极端情况 */ }
 }
@@ -707,6 +803,7 @@ function load(){
     if(raw){
       const d = JSON.parse(raw);
       if(Array.isArray(d.records)) state.records = d.records;
+      state.companyFlags = normalizeCompanyFlags(d.companyFlags);
       if(d.view === 'board') state.view = 'board';
       state.savedAt = d.savedAt || 0;
     }
@@ -768,16 +865,35 @@ function renderQuickDrop(){
   const q = kw.toLowerCase();
   if(!q){ drop.classList.remove('show'); drop.innerHTML = ''; return; }
   const hits = state.records.filter(r => String(r.company || '').toLowerCase().includes(q)).slice(0, 8);
-  drop.innerHTML = hits.length
-    ? hits.map(r => {
-        const st = statusByKey(r.status);
-        return `<div class="qd-item" data-id="${r.id}" title="点击定位到该条记录">
-          <span class="qd-co">${esc(r.company)}</span>
-          <span class="qd-pos">${esc(r.position)}${r.city ? ' · ' + esc(r.city) : ''}</span>
-          <span class="pill" style="background:${st.color}1c;color:${st.color}">${st.label}</span>
-        </div>`;
-      }).join('')
-    : `<div class="qd-empty">🔎 没有投递过「${esc(kw)}」的记录</div>`;
+  const flags = matchingCompanyFlags(kw);
+  const companyMatches = state.records.some(r => {
+    const companyKey = normalizeCompanyName(r.company);
+    return companyKey.includes(normalizeCompanyName(kw)) || normalizeCompanyName(kw).includes(companyKey);
+  });
+  const flagHtml = flags.map(flag => `
+    <div class="qd-company-state">
+      <div class="qd-state-main"><span>🏢</span><span class="qd-state-name">${esc(flag.company)}</span><b>暂无合适岗位</b></div>
+      <div class="qd-state-meta">最近标记：${esc(fmtTs(flag.updatedAt))}${flag.note ? ` · ${esc(flag.note)}` : ''}</div>
+      <div class="qd-state-actions">
+        <button type="button" data-company-action="note" data-company="${esc(flag.company)}">修改备注</button>
+        <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}">取消标记</button>
+      </div>
+    </div>`).join('');
+  const markHtml = !flags.length && (companyMatches || !hits.length)
+    ? `<div class="qd-company-action"><span>公司暂无标记</span><button type="button" data-company-action="mark" data-company="${esc(kw)}">标记为暂无合适岗位</button></div>`
+    : '';
+  const recordHtml = hits.map(r => {
+    const st = statusByKey(r.status);
+    return `<div class="qd-item" data-id="${r.id}" title="点击定位到该条记录">
+      <span class="qd-co">${esc(r.company)}</span>
+      <span class="qd-pos">${esc(r.position)}${r.city ? ' · ' + esc(r.city) : ''}</span>
+      <span class="pill" style="background:${st.color}1c;color:${st.color}">${st.label}</span>
+    </div>`;
+  }).join('');
+  const emptyHtml = !hits.length && !flags.length
+    ? `<div class="qd-empty">🔎 没有投递过「${esc(kw)}」的记录</div>`
+    : '';
+  drop.innerHTML = flagHtml + markHtml + recordHtml + emptyHtml;
   drop.classList.add('show');
 }
 function hideQuickDrop(){
@@ -809,18 +925,28 @@ function renderDupHint(){
   const v = $('f_company').value.trim();
   const hint = $('dupHint');
   if(!v){ hint.innerHTML = ''; return; }
-  const lv = v.toLowerCase();
+  const lv = normalizeCompanyName(v);
   const editingId = $('f_id').value;
   const hits = state.records
     .filter(r => r.id !== editingId && r.company && (
-      r.company.toLowerCase().includes(lv) || lv.includes(r.company.toLowerCase())
+      normalizeCompanyName(r.company).includes(lv) || lv.includes(normalizeCompanyName(r.company))
     )).slice(0, 6);
-  hint.innerHTML = hits.length
+  const flag = findCompanyFlag(v);
+  const flagHtml = flag ? `<div class="company-flag-hint">
+    <div class="flag-main">🏢 <b>该公司已标记为“暂无合适岗位”</b></div>
+    <div class="flag-meta">最近标记：${esc(fmtTs(flag.updatedAt))}${flag.note ? ` · ${esc(flag.note)}` : ''}</div>
+    <div style="margin-top:4px">
+      <button type="button" data-company-action="note" data-company="${esc(flag.company)}">修改备注</button>
+      <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}">取消标记</button>
+    </div>
+  </div>` : '';
+  const recordHtml = hits.length
     ? `<div style="color:#b45309;margin-bottom:4px">ℹ️ 已投过该公司 ${hits.length} 个岗位：</div>` + hits.map(r => {
         const st = statusByKey(r.status);
         return `<span class="pill" style="background:${st.color}1c;color:${st.color};margin:0 5px 5px 0" title="投递于 ${esc(r.applyDate || '')}">${esc(r.position)} · ${st.label}</span>`;
       }).join('')
     : '';
+  hint.innerHTML = flagHtml + recordHtml;
 }
 
 /* ================= 渲染 ================= */
@@ -1004,7 +1130,7 @@ function renderList(){
       return `
       <tr class="data-row" data-id="${r.id}">
         <td><button class="star-btn ${r.star ? 'on' : ''}" data-act="star" title="重点关注">${r.star ? '★' : '☆'}</button></td>
-        <td class="company-cell">${esc(r.company)}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
+        <td class="company-cell">${esc(r.company)}${companyFlagBadge(r.company)}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
         <td class="pos-cell">${esc(r.position)}</td>
         <td class="small">${esc(r.category || '—')}</td>
         <td class="small">${esc(r.city || '—')}</td>
@@ -1073,7 +1199,7 @@ function renderBoard(){
         ${cards.map(r => `
         <div class="k-card" draggable="true" data-id="${r.id}">
           <div class="k-top">
-            <span class="k-company">${r.star ? '⭐ ' : ''}${esc(r.company)}</span>
+            <span class="k-company">${r.star ? '⭐ ' : ''}${esc(r.company)}${companyFlagBadge(r.company)}</span>
             <span class="k-edit" data-act="edit">✏️</span>
           </div>
           <div class="k-pos">${esc(r.position)}</div>
@@ -1280,8 +1406,8 @@ function loadDemo(){
 
 /* ================= 导入导出 ================= */
 function exportJSON(){
-  if(!state.records.length){ toast('暂无数据可导出'); return; }
-  download(JSON.stringify({app: 'qiuzhao-tracker', exportedAt: nowStr(), records: state.records}, null, 2),
+  if(!state.records.length && !state.companyFlags.length){ toast('暂无数据可导出'); return; }
+  download(JSON.stringify({app: 'qiuzhao-tracker', exportedAt: nowStr(), records: state.records, companyFlags: state.companyFlags}, null, 2),
     `秋招投递备份-${todayStr()}.json`, 'application/json');
   toast('已导出 JSON 备份');
 }
@@ -1306,7 +1432,9 @@ function importJSON(file){
       const d = JSON.parse(reader.result);
       const recs = Array.isArray(d) ? d : d.records;
       if(!Array.isArray(recs)) throw new Error('格式不正确');
-      if(!confirm(`将导入 ${recs.length} 条记录并覆盖当前 ${state.records.length} 条数据，确定？`)) return;
+      const importedFlags = normalizeCompanyFlags(Array.isArray(d) ? [] : d.companyFlags);
+      if(!confirm(`将导入 ${recs.length} 条记录、${importedFlags.length} 个公司标记，并覆盖当前 ${state.records.length} 条数据，确定？`)) return;
+      state.companyFlags = importedFlags;
       state.records = recs.map(r => ({
         id: r.id || uid(), company: r.company || '未命名', position: r.position || '',
         category: r.category || '其他', city: r.city || '', channel: r.channel || '其他',
@@ -1339,6 +1467,11 @@ function bind(){
   $('q').addEventListener('input', e => { state.search = e.target.value; state.page = 1; render(); renderQuickDrop(); });
   $('q').addEventListener('focus', renderQuickDrop);
   $('quickDrop').addEventListener('click', e => {
+    const companyAction = e.target.closest('[data-company-action]');
+    if(companyAction){
+      handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company);
+      return;
+    }
     const item = e.target.closest('.qd-item');
     if(item) locateRecord(item.dataset.id);
   });
@@ -1346,6 +1479,10 @@ function bind(){
     if(!e.target.closest('.toolbar .search')) hideQuickDrop();
   });
   $('f_company').addEventListener('input', renderDupHint);
+  $('dupHint').addEventListener('click', e => {
+    const companyAction = e.target.closest('[data-company-action]');
+    if(companyAction) handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company);
+  });
   $('fStatus').addEventListener('change', e => { state.fStatus = e.target.value; state.page = 1; render(); });
   $('fCategory').addEventListener('change', e => { state.fCategory = e.target.value; state.page = 1; render(); });
   $('fChannel').addEventListener('change', e => { state.fChannel = e.target.value; state.page = 1; render(); });
@@ -1364,8 +1501,9 @@ function bind(){
   $('btnDemo').addEventListener('click', loadDemo);
   $('btnClear').addEventListener('click', () => {
     if(!confirm('确定要清空全部数据？此操作不可恢复！')) return;
-    if(!confirm('再次确认：真的要删除所有投递记录吗？（建议先导出备份）')) return;
+    if(!confirm('再次确认：真的要删除所有投递记录和公司标记吗？（建议先导出备份）')) return;
     state.records = [];
+    state.companyFlags = [];
     state.savedAt = Date.now();
     save();   // 同时清空云端（配置了云同步时），避免旧数据被拉回
     render();
