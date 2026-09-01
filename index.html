@@ -326,6 +326,7 @@ textarea{resize:vertical;min-height:64px}
     <select id="fCategory"><option value="">全部类型</option></select>
     <select id="fChannel"><option value="">全部渠道</option></select>
     <select id="sortBy">
+      <option value="statusPriority">按状态优先 + 投递时间 ↓</option>
       <option value="applyDesc">按投递时间 ↓</option>
       <option value="applyAsc">按投递时间 ↑</option>
       <option value="updateDesc">按最近更新 ↓</option>
@@ -437,7 +438,7 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.3.0';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
@@ -458,6 +459,13 @@ const STATUSES = [
 ];
 const STATUS_ORDER = new Map(STATUSES.map((s, i) => [s.key, i]));
 const TERMINAL = new Set(['offer','rejected','declined']);
+const STATUS_PRIORITY = new Map([
+  ['offer', 0],
+  ['interview1', 1], ['interview2', 1], ['interview3', 1], ['hr', 1],
+  ['test', 2], ['ai', 2], ['assessment', 2],
+  ['applied', 3],
+  ['rejected', 4], ['declined', 4],
+]);
 const HISTORICAL_FUNNEL_STATUSES = new Set(['rejected','declined']);
 const FUNNEL_EVAL_KEYS = ['assessment','test','ai','interview1','interview2','interview3','hr','offer'];
 const FUNNEL_INTERVIEW_KEYS = ['interview1','interview2','interview3','hr','offer'];
@@ -607,7 +615,7 @@ let state = {
   records: [],
   companyFlags: [],
   view: 'list',
-  search: '', fStatus: '', fCategory: '', fChannel: '', sort: 'applyDesc',
+  search: '', fStatus: '', fCategory: '', fChannel: '', sort: 'statusPriority',
   page: 1, pageSize: 20,
   openCols: {},        // 看板各列是否展开全部卡片
   expandedId: null,
@@ -849,8 +857,11 @@ function visibleRecords(){
     return true;
   });
   const starFirst = (a, b) => (b.star ? 1 : 0) - (a.star ? 1 : 0);
+  const applyDateDesc = (a, b) => (b.applyDate || '').localeCompare(a.applyDate || '') || b.updatedAt - a.updatedAt;
+  const statusPriority = r => STATUS_PRIORITY.get(r.status) ?? 99;
   const cmp = {
-    applyDesc:  (a, b) => starFirst(a, b) || (b.applyDate || '').localeCompare(a.applyDate || '') || b.updatedAt - a.updatedAt,
+    statusPriority: (a, b) => statusPriority(a) - statusPriority(b) || applyDateDesc(a, b) || starFirst(a, b),
+    applyDesc:  (a, b) => starFirst(a, b) || applyDateDesc(a, b),
     applyAsc:   (a, b) => starFirst(a, b) || (a.applyDate || '').localeCompare(b.applyDate || ''),
     updateDesc: (a, b) => starFirst(a, b) || b.updatedAt - a.updatedAt,
     company:    (a, b) => starFirst(a, b) || String(a.company).localeCompare(String(b.company), 'zh'),
