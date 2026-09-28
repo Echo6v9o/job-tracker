@@ -156,6 +156,8 @@ tbody tr.data-row:hover{background:#f8faff}
 .next-badge{font-size:12px;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#475569;white-space:nowrap}
 .next-badge.today{background:#fee2e2;color:#dc2626;font-weight:600}
 .next-badge.past{opacity:.55;text-decoration:line-through}
+.reason-cell{display:inline-block;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;color:#9f1239;background:#fff1f2;border-radius:6px;padding:2px 8px;font-size:12px}
+@media (max-width:640px){ .reason-cell{max-width:150px} }
 tr.detail-row td{background:#fbfcfe;padding:16px 20px 20px}
 .detail-grid{display:grid;grid-template-columns:2fr 1fr;gap:24px}
 .d-item{margin-bottom:8px}
@@ -1073,6 +1075,11 @@ function renderTrend(){
 }
 
 function nextBadge(r){
+  // 已挂的公司：该列显示备注内容（一般为挂因），无备注时维持原样
+  if(r.status === 'rejected' && String(r.note || '').trim()){
+    const reason = String(r.note).trim().split('\n')[0];
+    return `<span class="reason-cell" title="${esc(String(r.note).trim())}">挂因：${esc(reason)}</span>`;
+  }
   if(!r.nextTime) return '<span class="muted small">—</span>';
   const ts = new Date(r.nextTime).getTime();
   const today = todayStr();
