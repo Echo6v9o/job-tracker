@@ -989,7 +989,7 @@ function renderHero(){
 
 function renderStats(){
   const rs = state.records;
-  const interviewing = new Set(['ai','interview1','interview2','interview3','hr']);
+  const interviewing = new Set(['interview1','interview2','interview3','hr']);   // AI面不计入面试中
   $('s_total').textContent = rs.length;
   $('s_active').textContent = rs.filter(r => !TERMINAL.has(r.status)).length;
   $('s_interview').textContent = rs.filter(r => interviewing.has(r.status)).length;
