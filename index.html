@@ -139,7 +139,7 @@ tbody tr.data-row:hover{background:#f8faff}
 .star-btn{cursor:pointer;font-size:16px;color:#cbd5e1;background:none;border:0;padding:0}
 .star-btn.on{color:#f59e0b}
 .company-cell{font-weight:600;white-space:nowrap}
-.pos-cell{color:#374151}
+.pos-cell{color:#4338ca;font-weight:600}
 .muted{color:var(--muted)}
 .small{font-size:12px}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap}
@@ -181,7 +181,7 @@ tr.detail-row td{background:#fbfcfe;padding:16px 20px 20px}
 .k-card:active{cursor:grabbing}
 .k-card .k-top{display:flex;justify-content:space-between;align-items:center}
 .k-card .k-company{font-weight:700;font-size:13.5px}
-.k-card .k-pos{font-size:12.5px;color:#374151;margin-top:2px}
+.k-card .k-pos{font-size:12.5px;color:#4338ca;margin-top:2px;font-weight:600}
 .k-card .k-meta{font-size:11.5px;color:var(--muted);margin-top:6px}
 .k-card .k-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11.5px;color:var(--muted)}
 .k-edit{cursor:pointer;opacity:.45;font-size:12px}
@@ -474,7 +474,7 @@ const FUNNEL_INTERVIEW_KEYS = ['interview1','interview2','interview3','hr','offe
 const FUNNEL_EVAL_STATUSES = new Set(FUNNEL_EVAL_KEYS);
 const FUNNEL_INTERVIEW_STATUSES = new Set(FUNNEL_INTERVIEW_KEYS);
 const STALE_DAYS = 15;   // 流程连续多少天无进展，自动标记为已挂
-const CATEGORIES = ['技术研发','算法','测试/质量','产品','运营','市场/商业','设计','职能','其他'];
+const CATEGORIES = ['技术研发','算法','测试/质量','产品','运营','市场/商业','设计','管培生','职能','其他'];
 const CHANNELS = ['公司官网','校园招聘','内推','BOSS直聘','牛客','实习僧','猎聘','其他'];
 const CITY_PRESETS = ['北京','上海','深圳','杭州','广州','成都','南京','苏州','武汉','西安','长沙','重庆','合肥','天津','郑州','青岛','厦门','无锡','宁波','济南','大连','福州','昆明','贵阳','南昌','哈尔滨','沈阳','长春','石家庄','太原','南宁','兰州','海口','珠海','东莞','佛山','常州','嘉兴','绍兴','香港'];
 
