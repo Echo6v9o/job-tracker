@@ -953,12 +953,30 @@ function renderDupHint(){
       <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}">取消标记</button>
     </div>
   </div>` : '';
-  const recordHtml = hits.length
-    ? `<div style="color:#b45309;margin-bottom:4px">ℹ️ 已投过该公司 ${hits.length} 个岗位：</div>` + hits.map(r => {
-        const st = statusByKey(r.status);
-        return `<span class="pill" style="background:${st.color}1c;color:${st.color};margin:0 5px 5px 0" title="投递于 ${esc(r.applyDate || '')}">${esc(r.position)} · ${st.label}</span>`;
-      }).join('')
-    : '';
+  // 按公司分组展示：每家公司一组，组内列出各自的投递岗位与状态
+  let recordHtml = '';
+  if(hits.length){
+    const groups = new Map();
+    hits.forEach(r => {
+      if(!groups.has(r.company)) groups.set(r.company, []);
+      groups.get(r.company).push(r);
+    });
+    const MAX_CO = 3, MAX_POS = 5;
+    recordHtml = '<div style="color:#b45309;margin-bottom:6px">ℹ️ 匹配到已投递记录：</div>';
+    let shownCo = 0;
+    for(const [co, recs] of groups){
+      if(shownCo >= MAX_CO) break;
+      shownCo++;
+      recordHtml += `<div style="margin-bottom:8px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(co)} <span class="muted small">（${recs.length} 个岗位）</span></div>
+        <div>${recs.slice(0, MAX_POS).map(r => {
+          const st = statusByKey(r.status);
+          return `<span class="pill" style="background:${st.color}1c;color:${st.color};margin:0 5px 5px 0" title="投递于 ${esc(r.applyDate || '')}">${esc(r.position)} · ${st.label}</span>`;
+        }).join('')}${recs.length > MAX_POS ? `<span class="muted small" style="margin-left:2px">等共 ${recs.length} 个岗位</span>` : ''}</div>
+      </div>`;
+    }
+    if(groups.size > MAX_CO) recordHtml += `<div class="muted small">另有 ${groups.size - MAX_CO} 家匹配公司未展示</div>`;
+  }
   hint.innerHTML = flagHtml + recordHtml;
 }
 
