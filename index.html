@@ -1326,6 +1326,12 @@ function findRec(id){ return state.records.find(r => r.id === id); }
 
 function historyAfterStatusChange(r, key, note){
   const history = Array.isArray(r.history) ? r.history : [];
+  // HR面顺序不定：可能前置（技术面之前），也可能在一二三面之后（默认）。
+  // 因此切换到 HR面 一律追加新记录（支持前后多轮 HR 面），不回退、不清除其他阶段；
+  // 反过来切到其他状态时也保留已有 HR面 记录。
+  if(key === 'hr'){
+    return history.concat([{status: 'hr', time: nowStr(), note: note || ''}]);
+  }
   const targetIndex = history.map(h => h.status).lastIndexOf(key);
   if(targetIndex >= 0){
     const next = history.slice(0, targetIndex + 1);
@@ -1336,6 +1342,7 @@ function historyAfterStatusChange(r, key, note){
   const next = targetOrder === undefined
     ? history.slice()
     : history.filter(h => {
+        if(h.status === 'hr') return true;   // HR面可前置：前向变更时保留其记录
         const order = STATUS_ORDER.get(h.status);
         return order === undefined || order <= targetOrder;
       });
