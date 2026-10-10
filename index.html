@@ -451,10 +451,11 @@ const STATUSES = [
   {key:'assessment', label:'测评',      color:'#0ea5e9'},
   {key:'test',       label:'笔试',      color:'#2563eb'},
   {key:'ai',         label:'AI面',      color:'#6366f1'},
+  {key:'hrfirst',    label:'HR初面',    color:'#f59e0b'},
   {key:'interview1', label:'一面',      color:'#7c3aed'},
   {key:'interview2', label:'二面',      color:'#7c3aed'},
   {key:'interview3', label:'三面',      color:'#7c3aed'},
-  {key:'hr',         label:'HR面',      color:'#d97706'},
+  {key:'hr',         label:'HR终面',    color:'#d97706'},
   {key:'offer',      label:'Offer',    color:'#059669'},
   {key:'rejected',   label:'已挂',      color:'#dc2626'},
   {key:'declined',   label:'已放弃',    color:'#94a3b8'},
@@ -469,7 +470,7 @@ const STATUS_PRIORITY = new Map([
   ['rejected', 4], ['declined', 4],
 ]);
 const HISTORICAL_FUNNEL_STATUSES = new Set(['rejected','declined']);
-const FUNNEL_EVAL_KEYS = ['assessment','test','ai','interview1','interview2','interview3','hr','offer'];
+const FUNNEL_EVAL_KEYS = ['assessment','test','ai','hrfirst','interview1','interview2','interview3','hr','offer'];
 const FUNNEL_INTERVIEW_KEYS = ['interview1','interview2','interview3','hr','offer'];
 const FUNNEL_EVAL_STATUSES = new Set(FUNNEL_EVAL_KEYS);
 const FUNNEL_INTERVIEW_STATUSES = new Set(FUNNEL_INTERVIEW_KEYS);
@@ -1007,7 +1008,7 @@ function renderHero(){
 
 function renderStats(){
   const rs = state.records;
-  const interviewing = new Set(['interview1','interview2','interview3','hr']);   // AI面不计入面试中
+  const interviewing = new Set(['hrfirst','interview1','interview2','interview3','hr']);   // AI面不计入面试中
   $('s_total').textContent = rs.length;
   $('s_active').textContent = rs.filter(r => !TERMINAL.has(r.status)).length;
   $('s_interview').textContent = rs.filter(r => interviewing.has(r.status)).length;
@@ -1048,7 +1049,7 @@ function renderFunnel(){
   const nOffer = state.records.filter(r => r.status === 'offer').length;
   const rows = [
     ['投递', n, '#6366f1'],
-    ['进入测评/笔试/AI面', nEval, '#0ea5e9'],
+    ['进入测评/笔试/AI/HR初', nEval, '#0ea5e9'],
     ['进入面试', nItv, '#8b5cf6'],
     ['拿到 Offer', nOffer, '#10b981'],
   ];
@@ -1336,9 +1337,6 @@ function historyAfterStatusChange(r, key, note){
   const next = targetOrder === undefined
     ? history.slice()
     : history.filter(h => {
-        // HR面顺序不定：可能在一二三面之前。前进到一/二/三面时保留 HR面 记录；
-        // 回退到投递/测评/笔试/AI面（一面之前）时仍按顺序清除 HR面。
-        if(h.status === 'hr' && targetOrder >= STATUS_ORDER.get('interview1')) return true;
         const order = STATUS_ORDER.get(h.status);
         return order === undefined || order <= targetOrder;
       });
