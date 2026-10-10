@@ -471,7 +471,7 @@ const STATUS_PRIORITY = new Map([
 ]);
 const HISTORICAL_FUNNEL_STATUSES = new Set(['rejected','declined']);
 const FUNNEL_EVAL_KEYS = ['assessment','test','ai','hrfirst','interview1','interview2','interview3','hr','offer'];
-const FUNNEL_INTERVIEW_KEYS = ['interview1','interview2','interview3','hr','offer'];
+const FUNNEL_INTERVIEW_KEYS = ['hrfirst','interview1','interview2','interview3','hr','offer'];
 const FUNNEL_EVAL_STATUSES = new Set(FUNNEL_EVAL_KEYS);
 const FUNNEL_INTERVIEW_STATUSES = new Set(FUNNEL_INTERVIEW_KEYS);
 const STALE_DAYS = 15;   // 流程连续多少天无进展，自动标记为已挂
@@ -1049,7 +1049,7 @@ function renderFunnel(){
   const nOffer = state.records.filter(r => r.status === 'offer').length;
   const rows = [
     ['投递', n, '#6366f1'],
-    ['进入测评/笔试/AI/HR初', nEval, '#0ea5e9'],
+    ['进入测评/笔试/AI面', nEval, '#0ea5e9'],
     ['进入面试', nItv, '#8b5cf6'],
     ['拿到 Offer', nOffer, '#10b981'],
   ];
