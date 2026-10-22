@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>秋招投递管理</title>
+<title>校招投递管理</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%234f46e5'/><text x='50' y='66' font-size='46' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>招</text></svg>">
 <style>
 :root{
@@ -48,6 +48,16 @@ a{color:var(--primary);text-decoration:none}
 .update-banner .update-dismiss{background:rgba(37,99,235,.09);color:#1d4ed8}
 .update-banner .update-link:hover,.update-banner .update-dismiss:hover{filter:brightness(.96)}
 
+/* 招聘批次：所有入口共用标签颜色 */
+.season-bar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:18px}
+.season-tag{display:inline-flex;align-items:center;margin-left:6px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;vertical-align:middle}
+.season-tag.spring{background:#dcfce7;color:#166534}
+.season-tag.autumn{background:#ffedd5;color:#9a3412}
+#seasonSwitch button.active[data-season="spring"]{background:#166534;color:#fff}
+#seasonSwitch button.active[data-season="autumn"]{background:#9a3412;color:#fff}
+.qd-state-main,.flag-main{flex-wrap:wrap}
+.qd-item{flex-wrap:wrap}
+.qd-co{white-space:normal}
 /* ---------- 工具栏 ---------- */
 .toolbar{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:16px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .toolbar .search{position:relative}
@@ -292,7 +302,7 @@ textarea{resize:vertical;min-height:64px}
 <div class="hero">
   <div class="hero-inner">
     <div>
-      <h1>🎯 秋招投递管理</h1>
+      <h1>🎯 校招投递管理</h1>
       <div class="sub" id="heroSub">记录每一次投递，看清每一步进度</div>
     </div>
     <div class="sub" id="heroDate"></div>
@@ -320,6 +330,14 @@ textarea{resize:vertical;min-height:64px}
     </div>
   </div>
 
+  <div class="season-bar">
+    <div class="seg" id="seasonSwitch" role="group" aria-label="招聘批次筛选">
+      <button type="button" data-season="autumn">秋招</button>
+      <button type="button" data-season="spring">春招</button>
+      <button type="button" data-season="all">全部</button>
+    </div>
+    <span class="muted small" id="seasonHint"></span>
+  </div>
   <div class="upcoming" id="upcoming"></div>
 
   <div class="toolbar">
@@ -377,6 +395,7 @@ textarea{resize:vertical;min-height:64px}
     <form id="form">
       <input type="hidden" id="f_id">
       <div class="form-grid">
+        <div class="field"><div class="k"><b>*</b> 招聘批次</div><select id="f_season" required><option value="autumn">秋招</option><option value="spring">春招</option></select></div>
         <div class="field"><div class="k"><b>*</b> 公司</div><input id="f_company" placeholder="如：字节跳动" required autocomplete="off"><div class="dup-hint small" id="dupHint"></div></div>
         <div class="field"><div class="k"><b>*</b> 岗位</div><input id="f_position" placeholder="如：前端开发工程师" required></div>
         <div class="field"><div class="k">岗位类型</div><select id="f_category"></select></div>
@@ -440,7 +459,7 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
@@ -618,12 +637,24 @@ let state = {
   records: [],
   companyFlags: [],
   view: 'list',
+  season: 'autumn',
   search: '', fStatus: '', fCategory: '', fChannel: '', sort: 'statusPriority',
   page: 1, pageSize: 20,
   openCols: {},        // 看板各列是否展开全部卡片
   expandedId: null,
   savedAt: 0,          // 数据版本时间戳，用于多端同步比较
 };
+
+/* ================= 招聘批次 ================= */
+function seasonOf(item){ return item && item.season === 'spring' ? 'spring' : 'autumn'; }
+function seasonLabel(season){ return season === 'spring' ? '春招' : '秋招'; }
+function seasonTag(item){
+  const season = seasonOf(item);
+  return '<span class="season-tag ' + season + '">' + seasonLabel(season) + '</span>';
+}
+function normalizeRecords(records){ return records.map(r => ({...r, season: seasonOf(r)})); }
+function seasonRecords(){ return state.records.filter(r => state.season === 'all' || seasonOf(r) === state.season); }
+function actionSeason(){ return $('mask').classList.contains('show') ? $('f_season').value : (state.season === 'spring' ? 'spring' : 'autumn'); }
 
 /* ================= 公司级标记 ================= */
 function normalizeCompanyName(name){
@@ -635,11 +666,14 @@ function normalizeCompanyFlags(flags){
     const raw = f || {};
     const company = String(raw.company || raw.name || raw.key || '').trim();
     const key = normalizeCompanyName(raw.key || company);
-    if(!key || seen.has(key)) return null;
-    seen.add(key);
+    const season = seasonOf(raw);
+    const identity = season + ':' + key;
+    if(!key || seen.has(identity)) return null;
+    seen.add(identity);
     return {
       id: raw.id || `cf_${uid()}`,
       key,
+      season,
       company,
       status: 'no-suitable-role',
       note: String(raw.note || ''),
@@ -648,47 +682,47 @@ function normalizeCompanyFlags(flags){
     };
   }).filter(Boolean);
 }
-function findCompanyFlag(company){
+function findCompanyFlag(company, season = actionSeason()){
   const key = normalizeCompanyName(company);
   return key && Array.isArray(state.companyFlags)
-    ? state.companyFlags.find(f => f.key === key)
+    ? state.companyFlags.find(f => f.key === key && seasonOf(f) === season)
     : null;
 }
 function matchingCompanyFlags(query){
   const key = normalizeCompanyName(query);
   if(!key || !Array.isArray(state.companyFlags)) return [];
   return state.companyFlags
-    .filter(f => f.key.includes(key) || key.includes(f.key))
+    .filter(f => (state.season === 'all' || seasonOf(f) === state.season) && (f.key.includes(key) || key.includes(f.key)))
     .slice(0, 6);
 }
-function companyFlagBadge(company){
-  const flag = findCompanyFlag(company);
+function companyFlagBadge(company, season){
+  const flag = findCompanyFlag(company, season);
   if(!flag) return '';
   const title = flag.note ? `暂无合适岗位：${flag.note}` : '暂无合适岗位';
   return `<span class="company-flag-badge" title="${esc(title)}">🏢 暂无合适岗位</span>`;
 }
-function markCompanyNoSuitable(company){
+function markCompanyNoSuitable(company, season = actionSeason()){
   const name = String(company ?? '').trim();
   const key = normalizeCompanyName(name);
   if(!key) return;
-  if(findCompanyFlag(name)){ toast('该公司已经标记为暂无合适岗位'); return; }
+  if(findCompanyFlag(name, season)){ toast('该公司已经标记为暂无合适岗位'); return; }
   state.companyFlags.unshift({
-    id: `cf_${uid()}`, key, company: name, status: 'no-suitable-role', note: '',
+    id: `cf_${uid()}`, key, season, company: name, status: 'no-suitable-role', note: '',
     createdAt: Date.now(), updatedAt: Date.now(),
   });
   save(); render(); renderQuickDrop(); renderDupHint();
-  toast(`已标记「${name}」暂无合适岗位`);
+  toast(`已标记「${name}」${seasonLabel(season)}暂无合适岗位`);
 }
-function unmarkCompany(company){
-  const flag = findCompanyFlag(company);
+function unmarkCompany(company, season = actionSeason()){
+  const flag = findCompanyFlag(company, season);
   if(!flag) return;
-  if(!confirm(`取消「${flag.company}」的暂无合适岗位标记？`)) return;
-  state.companyFlags = state.companyFlags.filter(f => f.key !== flag.key);
+  if(!confirm(`取消「${flag.company}」${seasonLabel(season)}的暂无合适岗位标记？`)) return;
+  state.companyFlags = state.companyFlags.filter(f => f.key !== flag.key || seasonOf(f) !== season);
   save(); render(); renderQuickDrop(); renderDupHint();
   toast(`已取消「${flag.company}」标记`);
 }
-function editCompanyFlagNote(company){
-  const flag = findCompanyFlag(company);
+function editCompanyFlagNote(company, season = actionSeason()){
+  const flag = findCompanyFlag(company, season);
   if(!flag) return;
   const note = prompt(`修改「${flag.company}」的备注（可留空）`, flag.note || '');
   if(note === null) return;
@@ -697,10 +731,10 @@ function editCompanyFlagNote(company){
   save(); render(); renderQuickDrop(); renderDupHint();
   toast('公司标记备注已更新');
 }
-function handleCompanyAction(action, company){
-  if(action === 'mark') markCompanyNoSuitable(company);
-  else if(action === 'unmark') unmarkCompany(company);
-  else if(action === 'note') editCompanyFlagNote(company);
+function handleCompanyAction(action, company, season){
+  if(action === 'mark') markCompanyNoSuitable(company, season);
+  else if(action === 'unmark') unmarkCompany(company, season);
+  else if(action === 'note') editCompanyFlagNote(company, season);
 }
 
 /* ================= 云同步（GitHub 私有仓库） =================
@@ -751,7 +785,7 @@ async function ghPull(){
     Sync.sha = d.sha;
     const data = JSON.parse(b64decode(d.content));
     if(Array.isArray(data.records) && (data.savedAt || 0) > (state.savedAt || 0)){
-      state.records = data.records;
+      state.records = normalizeRecords(data.records);
       state.companyFlags = normalizeCompanyFlags(data.companyFlags);
       if(data.view === 'board' || data.view === 'list') state.view = data.view;
       state.savedAt = data.savedAt;
@@ -796,7 +830,7 @@ async function ghPush(){
 function persistLocal(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      records: state.records, companyFlags: state.companyFlags, view: state.view, savedAt: state.savedAt || Date.now(),
+      records: state.records, companyFlags: state.companyFlags, view: state.view, season: state.season, savedAt: state.savedAt || Date.now(),
     }));
   }catch(e){ /* 存储已满等极端情况 */ }
 }
@@ -813,10 +847,12 @@ function load(){
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){
       const d = JSON.parse(raw);
-      if(Array.isArray(d.records)) state.records = d.records;
+      if(Array.isArray(d.records)) state.records = normalizeRecords(d.records);
       state.companyFlags = normalizeCompanyFlags(d.companyFlags);
       if(d.view === 'board') state.view = 'board';
+      if(['autumn','spring','all'].includes(d.season)) state.season = d.season;
       state.savedAt = d.savedAt || 0;
+      persistLocal();
     }
   }catch(e){ /* 忽略损坏数据 */ }
 }
@@ -848,7 +884,7 @@ function autoRejectStale(){
 /* ================= 筛选 / 排序 ================= */
 function visibleRecords(){
   const q = state.search.trim().toLowerCase();
-  let arr = state.records.filter(r => {
+  let arr = seasonRecords().filter(r => {
     if(state.fStatus && r.status !== state.fStatus) return false;
     if(state.fCategory && r.category !== state.fCategory) return false;
     if(state.fChannel && r.channel !== state.fChannel) return false;
@@ -878,28 +914,25 @@ function renderQuickDrop(){
   const kw = state.search.trim();
   const q = kw.toLowerCase();
   if(!q){ drop.classList.remove('show'); drop.innerHTML = ''; return; }
-  const hits = state.records.filter(r => String(r.company || '').toLowerCase().includes(q)).slice(0, 8);
+  const hits = seasonRecords().filter(r => normalizeCompanyName(r.company).includes(normalizeCompanyName(kw))).slice(0, 8);
   const flags = matchingCompanyFlags(kw);
-  const companyMatches = state.records.some(r => {
-    const companyKey = normalizeCompanyName(r.company);
-    return companyKey.includes(normalizeCompanyName(kw)) || normalizeCompanyName(kw).includes(companyKey);
-  });
   const flagHtml = flags.map(flag => `
     <div class="qd-company-state">
-      <div class="qd-state-main"><span>🏢</span><span class="qd-state-name">${esc(flag.company)}</span><b>暂无合适岗位</b></div>
+      <div class="qd-state-main"><span>🏢</span><span class="qd-state-name">${esc(flag.company)}</span>${seasonTag(flag)}<b>暂无合适岗位</b></div>
       <div class="qd-state-meta">最近标记：${esc(fmtTs(flag.updatedAt))}${flag.note ? ` · ${esc(flag.note)}` : ''}</div>
       <div class="qd-state-actions">
-        <button type="button" data-company-action="note" data-company="${esc(flag.company)}">修改备注</button>
-        <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}">取消标记</button>
+        <button type="button" data-company-action="note" data-company="${esc(flag.company)}" data-season="${seasonOf(flag)}">修改备注</button>
+        <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}" data-season="${seasonOf(flag)}">取消标记</button>
       </div>
     </div>`).join('');
-  const markHtml = !flags.length && (companyMatches || !hits.length)
-    ? `<div class="qd-company-action"><span>公司暂无标记</span><button type="button" data-company-action="mark" data-company="${esc(kw)}">标记为暂无合适岗位</button></div>`
-    : '';
+  const markSeasons = state.season === 'all' ? ['autumn', 'spring'] : [state.season];
+  const markHtml = markSeasons.filter(season => !findCompanyFlag(kw, season)).map(season =>
+    `<div class="qd-company-action"><span>${seasonLabel(season)}公司标记</span><button type="button" data-company-action="mark" data-company="${esc(kw)}" data-season="${season}">标记为${seasonLabel(season)}暂无合适岗位</button></div>`
+  ).join('');
   const recordHtml = hits.map(r => {
     const st = statusByKey(r.status);
     return `<div class="qd-item" data-id="${r.id}" title="点击定位到该条记录">
-      <span class="qd-co">${esc(r.company)}</span>
+      <span class="qd-co">${esc(r.company)}${seasonTag(r)}</span>
       <span class="qd-pos">${esc(r.position)}${r.city ? ' · ' + esc(r.city) : ''}</span>
       <span class="pill" style="background:${st.color}1c;color:${st.color}">${st.label}</span>
     </div>`;
@@ -918,6 +951,8 @@ function locateRecord(id){
   hideQuickDrop();
   const r = findRec(id);
   if(!r) return;
+  state.season = seasonOf(r);
+  persistLocal();
   state.search = ''; $('q').value = '';
   state.fStatus = state.fCategory = state.fChannel = '';
   $('fStatus').value = ''; $('fCategory').value = ''; $('fChannel').value = '';
@@ -944,45 +979,53 @@ function renderDupHint(){
   const hits = state.records
     .filter(r => r.id !== editingId && r.company && (
       normalizeCompanyName(r.company).includes(lv) || lv.includes(normalizeCompanyName(r.company))
-    )).slice(0, 6);
-  const flag = findCompanyFlag(v);
-  const flagHtml = flag ? `<div class="company-flag-hint">
-    <div class="flag-main">🏢 <b>该公司已标记为“暂无合适岗位”</b></div>
+    )).sort((a, b) => Number(seasonOf(b) === $('f_season').value) - Number(seasonOf(a) === $('f_season').value));
+  const flags = state.companyFlags.filter(f => f.key.includes(lv) || lv.includes(f.key));
+  const flagHtml = flags.map(flag => `<div class="company-flag-hint">
+    <div class="flag-main">🏢 <b>${esc(flag.company)}</b>${seasonTag(flag)}<b>暂无合适岗位</b></div>
     <div class="flag-meta">最近标记：${esc(fmtTs(flag.updatedAt))}${flag.note ? ` · ${esc(flag.note)}` : ''}</div>
     <div style="margin-top:4px">
-      <button type="button" data-company-action="note" data-company="${esc(flag.company)}">修改备注</button>
-      <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}">取消标记</button>
+      <button type="button" data-company-action="note" data-company="${esc(flag.company)}" data-season="${seasonOf(flag)}">修改备注</button>
+      <button type="button" data-company-action="unmark" data-company="${esc(flag.company)}" data-season="${seasonOf(flag)}">取消标记</button>
     </div>
-  </div>` : '';
-  // 按公司分组展示：每家公司一组，组内列出各自的投递岗位与状态
+  </div>`).join('');
+  // 按公司和批次分组展示，组内列出投递岗位与状态
   let recordHtml = '';
   if(hits.length){
     const groups = new Map();
     hits.forEach(r => {
-      if(!groups.has(r.company)) groups.set(r.company, []);
-      groups.get(r.company).push(r);
+      const groupKey = r.company + ':' + seasonOf(r);
+      if(!groups.has(groupKey)) groups.set(groupKey, []);
+      groups.get(groupKey).push(r);
     });
     const MAX_CO = 3, MAX_POS = 5;
-    recordHtml = '<div style="color:#b45309;margin-bottom:6px">ℹ️ 匹配到已投递记录：</div>';
+    recordHtml = '<div style="color:#b45309;margin-bottom:6px">ℹ️ 匹配到已投递记录（含春招 / 秋招）：</div>';
     let shownCo = 0;
-    for(const [co, recs] of groups){
+    for(const recs of groups.values()){
+      const co = recs[0].company;
       if(shownCo >= MAX_CO) break;
       shownCo++;
       recordHtml += `<div style="margin-bottom:8px">
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(co)} <span class="muted small">（${recs.length} 个岗位）</span></div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(co)}${seasonTag(recs[0])} <span class="muted small">（${recs.length} 个岗位）</span></div>
         <div>${recs.slice(0, MAX_POS).map(r => {
           const st = statusByKey(r.status);
           return `<span class="pill" style="background:${st.color}1c;color:${st.color};margin:0 5px 5px 0" title="投递于 ${esc(r.applyDate || '')}">${esc(r.position)} · ${st.label}</span>`;
         }).join('')}${recs.length > MAX_POS ? `<span class="muted small" style="margin-left:2px">等共 ${recs.length} 个岗位</span>` : ''}</div>
       </div>`;
     }
-    if(groups.size > MAX_CO) recordHtml += `<div class="muted small">另有 ${groups.size - MAX_CO} 家匹配公司未展示</div>`;
+    if(groups.size > MAX_CO) recordHtml += `<div class="muted small">另有 ${groups.size - MAX_CO} 组公司 / 批次未展示</div>`;
   }
   hint.innerHTML = flagHtml + recordHtml;
 }
 
 /* ================= 渲染 ================= */
 function render(){
+  document.querySelectorAll('#seasonSwitch button').forEach(btn => {
+    const active = btn.dataset.season === state.season;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+  $('seasonHint').textContent = (state.season === 'all' ? '全部批次' : seasonLabel(state.season)) + ' · 表格、看板、统计和近期安排同步切换';
   renderHero();
   renderStats();
   renderUpcoming();
@@ -1001,13 +1044,13 @@ function renderHero(){
   const t = new Date();
   const week = ['日','一','二','三','四','五','六'][t.getDay()];
   $('heroDate').textContent = `${t.getFullYear()} 年 ${t.getMonth()+1} 月 ${t.getDate()} 日 · 星期${week}`;
-  $('heroSub').textContent = state.records.length
-    ? `已投递 ${state.records.length} 家 · 继续加油，offer 就在路上 💪`
+  $('heroSub').textContent = seasonRecords().length
+    ? `已投递 ${seasonRecords().length} 条 · 继续加油，offer 就在路上 💪`
     : '记录每一次投递，看清每一步进度';
 }
 
 function renderStats(){
-  const rs = state.records;
+  const rs = seasonRecords();
   const interviewing = new Set(['hrfirst','interview1','interview2','interview3','hr']);   // AI面不计入面试中
   $('s_total').textContent = rs.length;
   $('s_active').textContent = rs.filter(r => !TERMINAL.has(r.status)).length;
@@ -1018,7 +1061,7 @@ function renderStats(){
 
 function renderUpcoming(){
   const now = Date.now();
-  const list = state.records
+  const list = seasonRecords()
     .filter(r => r.nextTime)
     .map(r => ({r, ts: new Date(r.nextTime).getTime()}))
     .filter(x => !isNaN(x.ts) && x.ts >= now - 2 * 3600e3)
@@ -1029,7 +1072,7 @@ function renderUpcoming(){
         const soon = x.ts - now < 36 * 3600e3;
         return `<div class="up-chip ${soon ? 'soon' : ''}" title="${esc(x.r.company)} ${esc(x.r.position)}">
           <span class="date">${fmtShort(x.r.nextTime)}</span>
-          <span>${esc(x.r.company)} · ${esc(x.r.position)}</span>
+          <span>${esc(x.r.company)}${seasonTag(x.r)} · ${esc(x.r.position)}</span>
           <span class="muted small">${statusByKey(x.r.status).label}</span>
         </div>`;
       }).join('')
@@ -1037,16 +1080,16 @@ function renderUpcoming(){
 }
 
 function renderFunnel(){
-  const total = state.records.length || 1;
-  const n = state.records.length;
+  const total = seasonRecords().length || 1;
+  const n = seasonRecords().length;
   // 进行中记录按当前状态统计；已挂/已放弃记录保留历史已到达阶段
-  const nEval = state.records.filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
+  const nEval = seasonRecords().filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
     ? reached(r, FUNNEL_EVAL_KEYS)
     : FUNNEL_EVAL_STATUSES.has(r.status)).length;
-  const nItv = state.records.filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
+  const nItv = seasonRecords().filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
     ? reached(r, FUNNEL_INTERVIEW_KEYS)
     : FUNNEL_INTERVIEW_STATUSES.has(r.status)).length;
-  const nOffer = state.records.filter(r => r.status === 'offer').length;
+  const nOffer = seasonRecords().filter(r => r.status === 'offer').length;
   const rows = [
     ['投递', n, '#6366f1'],
     ['进入测评/笔试/AI面', nEval, '#0ea5e9'],
@@ -1054,7 +1097,7 @@ function renderFunnel(){
     ['拿到 Offer', nOffer, '#10b981'],
   ];
   $('funnel').innerHTML = rows.map(([lbl, v, color]) => {
-    const pct = state.records.length ? Math.round(v / total * 100) : 0;
+    const pct = seasonRecords().length ? Math.round(v / total * 100) : 0;
     return `<div class="funnel-row">
       <div class="fl">${lbl}</div>
       <div class="track"><div class="fill" style="width:${pct}%;background:${color}"></div></div>
@@ -1064,8 +1107,8 @@ function renderFunnel(){
 }
 
 function renderDist(){
-  const n = state.records.length;
-  const rows = STATUSES.map(s => ({s, c: state.records.filter(r => r.status === s.key).length}))
+  const n = seasonRecords().length;
+  const rows = STATUSES.map(s => ({s, c: seasonRecords().filter(r => r.status === s.key).length}))
     .filter(x => x.c > 0);
   if(!rows.length){ $('dist').innerHTML = '<div class="muted small">暂无数据</div>'; return; }
   $('dist').innerHTML = rows.map(({s, c}) => {
@@ -1083,7 +1126,7 @@ function renderTrend(){
   const span = window.innerWidth <= 640 ? 7 : 14;   // 手机窄屏只看最近 7 天，避免柱状图挤压
   const days = [];
   for(let i = span - 1; i >= 0; i--) days.push(dstr(-i));
-  const counts = days.map(d => state.records.filter(r => (r.applyDate || '') === d).length);
+  const counts = days.map(d => seasonRecords().filter(r => (r.applyDate || '') === d).length);
   const max = Math.max(1, ...counts);
   $('trendTitle').textContent = `近 ${span} 天投递趋势`;
   $('trend').innerHTML = days.map((d, i) => `
@@ -1140,7 +1183,7 @@ function renderList(){
   if(state.page > totalPages) state.page = totalPages;
   if(state.page < 1) state.page = 1;
   const arr = all.slice((state.page - 1) * state.pageSize, state.page * state.pageSize);
-  $('countHint').textContent = `筛选出 ${all.length} / ${state.records.length} 条`;
+  $('countHint').textContent = `筛选出 ${all.length} / ${seasonRecords().length} 条`;
   if(!state.records.length){
     $('listWrap').innerHTML = `<div class="empty" style="border:0;box-shadow:none">
       <div class="big">🎒</div>
@@ -1153,7 +1196,7 @@ function renderList(){
     return;
   }
   if(!arr.length){
-    $('listWrap').innerHTML = `<div class="empty" style="border:0;box-shadow:none;padding:36px">没有符合筛选条件的记录</div>`;
+    $('listWrap').innerHTML = `<div class="empty" style="border:0;box-shadow:none;padding:36px">当前批次没有符合筛选条件的记录，可切换批次或添加投递</div>`;
     return;
   }
   $('listWrap').innerHTML = `<table>
@@ -1167,7 +1210,7 @@ function renderList(){
       return `
       <tr class="data-row" data-id="${r.id}">
         <td><button class="star-btn ${r.star ? 'on' : ''}" data-act="star" title="重点关注">${r.star ? '★' : '☆'}</button></td>
-        <td class="company-cell">${esc(r.company)}${companyFlagBadge(r.company)}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
+        <td class="company-cell">${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
         <td class="pos-cell">${esc(r.position)}</td>
         <td class="small">${esc(r.category || '—')}</td>
         <td class="small">${esc(r.city || '—')}</td>
@@ -1236,7 +1279,7 @@ function renderBoard(){
         ${cards.map(r => `
         <div class="k-card" draggable="true" data-id="${r.id}">
           <div class="k-top">
-            <span class="k-company">${r.star ? '⭐ ' : ''}${esc(r.company)}${companyFlagBadge(r.company)}</span>
+            <span class="k-company">${r.star ? '⭐ ' : ''}${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}</span>
             <span class="k-edit" data-act="edit">✏️</span>
           </div>
           <div class="k-pos">${esc(r.position)}</div>
@@ -1367,10 +1410,12 @@ function openModal(id){
   $('dupHint').innerHTML = '';
   $('f_id').value = id || '';
   $('f_applyDate').value = todayStr();
+  $('f_season').value = state.season === 'spring' ? 'spring' : 'autumn';
   if(id){
     const r = findRec(id);
     if(!r) return;
     $('mTitle').textContent = '编辑投递';
+    $('f_season').value = seasonOf(r);
     $('f_company').value = r.company || '';
     $('f_position').value = r.position || '';
     $('f_category').value = r.category || CATEGORIES[0];
@@ -1394,6 +1439,7 @@ function openModal(id){
     $('f_status').value = 'applied';
     cityTags = [];
   }
+  renderDupHint();
   renderCityTags();
   $('f_city').value = '';
   closeCityDrop();
@@ -1406,6 +1452,7 @@ function loadDemo(){
   if(state.records.length && !confirm('将在现有记录后追加 8 条示例数据，继续？')) return;
   const dt = (n, h, m) => `${dstr(n)}T${pad(h)}:${pad(m)}`;
   const mk = (company, position, category, city, channel, applyOffset, status, chain, extra = {}) => ({
+    season: state.season === 'spring' ? 'spring' : 'autumn',
     id: uid(), company, position, category, city, channel,
     applyDate: dstr(applyOffset), status,
     history: chain.map(([k, off]) => ({status: k, time: `${dstr(off)} 10:00`, note: ''})),
@@ -1445,21 +1492,21 @@ function loadDemo(){
 function exportJSON(){
   if(!state.records.length && !state.companyFlags.length){ toast('暂无数据可导出'); return; }
   download(JSON.stringify({app: 'qiuzhao-tracker', exportedAt: nowStr(), records: state.records, companyFlags: state.companyFlags}, null, 2),
-    `秋招投递备份-${todayStr()}.json`, 'application/json');
+    `校招投递备份-${todayStr()}.json`, 'application/json');
   toast('已导出 JSON 备份');
 }
 function exportCSV(){
   if(!state.records.length){ toast('暂无数据可导出'); return; }
-  const head = ['公司','岗位','岗位类型','城市','投递渠道','投递日期','当前状态','下一步时间','薪资','投递链接','重点关注','备注','最近更新'];
+  const head = ['招聘批次','公司','岗位','岗位类型','城市','投递渠道','投递日期','当前状态','下一步时间','薪资','投递链接','重点关注','备注','最近更新'];
   const rows = state.records.map(r => [
-    r.company, r.position, r.category, r.city, r.channel, r.applyDate,
+    seasonLabel(seasonOf(r)), r.company, r.position, r.category, r.city, r.channel, r.applyDate,
     statusByKey(r.status).label, r.nextTime ? r.nextTime.replace('T', ' ') : '',
     r.salary || '', r.link || '', r.star ? '是' : '', r.note || '', fmtTs(r.updatedAt),
   ]);
   const csv = [head, ...rows].map(row =>
     row.map(v => { v = String(v ?? ''); return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }).join(',')
   ).join('\r\n');
-  download('\ufeff' + csv, `秋招投递记录-${todayStr()}.csv`, 'text/csv;charset=utf-8');
+  download('\ufeff' + csv, `校招投递记录-${todayStr()}.csv`, 'text/csv;charset=utf-8');
   toast('已导出 CSV（可用 Excel 打开）');
 }
 function importJSON(file){
@@ -1473,7 +1520,7 @@ function importJSON(file){
       if(!confirm(`将导入 ${recs.length} 条记录、${importedFlags.length} 个公司标记，并覆盖当前 ${state.records.length} 条数据，确定？`)) return;
       state.companyFlags = importedFlags;
       state.records = recs.map(r => ({
-        id: r.id || uid(), company: r.company || '未命名', position: r.position || '',
+        season: seasonOf(r), id: r.id || uid(), company: r.company || '未命名', position: r.position || '',
         category: r.category || '其他', city: r.city || '', channel: r.channel || '其他',
         applyDate: r.applyDate || todayStr(), status: STATUSES.some(s => s.key === r.status) ? r.status : 'applied',
         nextTime: r.nextTime || '', salary: r.salary || '', link: r.link || '',
@@ -1500,13 +1547,25 @@ function bind(){
   $('f_channel').innerHTML = CHANNELS.map(c => `<option>${c}</option>`).join('');
   $('f_status').innerHTML = STATUSES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
 
+  $('seasonSwitch').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-season]');
+    if(!btn) return;
+    state.season = btn.dataset.season;
+    state.page = 1;
+    state.expandedId = null;
+    state.openCols = {};
+    persistLocal();
+    render();
+    hideQuickDrop();
+  });
+  $('f_season').addEventListener('change', renderDupHint);
   // 工具栏（筛选/排序变化时回到第 1 页）
   $('q').addEventListener('input', e => { state.search = e.target.value; state.page = 1; render(); renderQuickDrop(); });
   $('q').addEventListener('focus', renderQuickDrop);
   $('quickDrop').addEventListener('click', e => {
     const companyAction = e.target.closest('[data-company-action]');
     if(companyAction){
-      handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company);
+      handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company, companyAction.dataset.season);
       return;
     }
     const item = e.target.closest('.qd-item');
@@ -1518,7 +1577,7 @@ function bind(){
   $('f_company').addEventListener('input', renderDupHint);
   $('dupHint').addEventListener('click', e => {
     const companyAction = e.target.closest('[data-company-action]');
-    if(companyAction) handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company);
+    if(companyAction) handleCompanyAction(companyAction.dataset.companyAction, companyAction.dataset.company, companyAction.dataset.season);
   });
   $('fStatus').addEventListener('change', e => { state.fStatus = e.target.value; state.page = 1; render(); });
   $('fCategory').addEventListener('change', e => { state.fCategory = e.target.value; state.page = 1; render(); });
@@ -1698,6 +1757,7 @@ function bind(){
   $('form').addEventListener('submit', e => {
     e.preventDefault();
     const data = {
+      season: $('f_season').value,
       company: $('f_company').value.trim(),
       position: $('f_position').value.trim(),
       category: $('f_category').value,
