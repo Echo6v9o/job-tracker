@@ -52,6 +52,8 @@ a{color:var(--primary);text-decoration:none}
 .season-bar{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:18px}
 .season-tag{display:inline-flex;align-items:center;margin-left:6px;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;vertical-align:middle}
 .season-tag.spring{background:#dcfce7;color:#166534}
+/* 公司标签（所有权/规模/行业） */
+.co-tag{display:inline-flex;align-items:center;margin-right:4px;padding:1px 6px;border-radius:6px;font-size:10.5px;font-weight:700;white-space:nowrap;vertical-align:middle;line-height:1.6}
 .season-tag.autumn{background:#ffedd5;color:#9a3412}
 #seasonSwitch button.active[data-season="spring"]{background:#166534;color:#fff}
 #seasonSwitch button.active[data-season="autumn"]{background:#9a3412;color:#fff}
@@ -397,6 +399,13 @@ textarea{resize:vertical;min-height:64px}
       <div class="form-grid">
         <div class="field"><div class="k"><b>*</b> 招聘批次</div><select id="f_season" required><option value="autumn">秋招</option><option value="spring">春招</option></select></div>
         <div class="field"><div class="k"><b>*</b> 公司</div><input id="f_company" placeholder="如：字节跳动" required autocomplete="off"><div class="dup-hint small" id="dupHint"></div></div>
+        <div class="field"><div class="k">公司标签（可不选）</div>
+          <div style="display:flex;gap:8px">
+            <select id="f_ownership" style="flex:1"><option value="">所有权—</option></select>
+            <select id="f_scale" style="flex:1"><option value="">规模—</option></select>
+          </div>
+          <select id="f_industry" style="width:100%;margin-top:8px"><option value="">行业类别—</option></select>
+        </div>
         <div class="field"><div class="k"><b>*</b> 岗位</div><input id="f_position" placeholder="如：前端开发工程师" required></div>
         <div class="field"><div class="k">岗位类型</div><select id="f_category"></select></div>
         <div class="field" id="cityField"><div class="k">城市（可多选）</div>
@@ -497,6 +506,49 @@ const STALE_DAYS = 15;   // 流程连续多少天无进展，自动标记为已�
 const CATEGORIES = ['技术研发','算法','测试/质量','产品','运营','市场/商业','设计','管培生','职能','其他'];
 const CHANNELS = ['公司官网','校园招聘','内推','BOSS直聘','牛客','实习僧','猎聘','其他'];
 const CITY_PRESETS = ['北京','上海','深圳','杭州','广州','成都','南京','苏州','武汉','西安','长沙','重庆','合肥','天津','郑州','青岛','厦门','无锡','宁波','济南','大连','福州','昆明','贵阳','南昌','哈尔滨','沈阳','长春','石家庄','太原','南宁','兰州','海口','珠海','东莞','佛山','常州','嘉兴','绍兴','香港'];
+/* 公司标签：所有权 / 规模 / 行业，均可不设置；未设置不显示 */
+const COMPANY_TAGS = {
+  ownership: [
+    {key:'central',   label:'央企', color:'#b91c1c'},
+    {key:'state',     label:'国企', color:'#c2410c'},
+    {key:'private',   label:'民企', color:'#0891b2'},
+    {key:'foreign',   label:'外企', color:'#7c3aed'},
+  ],
+  scale: [
+    {key:'big',       label:'大厂', color:'#4f46e5'},
+    {key:'mid',       label:'中厂', color:'#0d9488'},
+    {key:'small',     label:'小厂', color:'#9333ea'},
+  ],
+  industry: [
+    {key:'internet',  label:'互联网', color:'#2563eb'},
+    {key:'finance',   label:'金融',   color:'#b45309'},
+    {key:'telecom',   label:'通信',   color:'#0369a1'},
+    {key:'hardware',  label:'硬件/电子', color:'#65a30d'},
+    {key:'manu',      label:'制造',   color:'#57534e'},
+    {key:'energy',    label:'能源/化工', color:'#78716c'},
+    {key:'auto',      label:'汽车',   color:'#1e40af'},
+    {key:'bio',       label:'医药/生物', color:'#15803d'},
+    {key:'estate',    label:'地产/建筑', color:'#a16207'},
+    {key:'consult',   label:'咨询/律所', color:'#9f1239'},
+    {key:'edu',       label:'教育',   color:'#9a3412'},
+    {key:'retail',    label:'消费/零售', color:'#be185d'},
+    {key:'game',      label:'游戏',   color:'#6d28d9'},
+    {key:'other',     label:'其他行业', color:'#64748b'},
+  ],
+};
+const COMPANY_TAG_LABELS = {};
+for(const group of Object.values(COMPANY_TAGS)){
+  for(const t of group) COMPANY_TAG_LABELS[t.key] = t;
+}
+// 公司名前的标签串：所有权 + 规模 + 行业，未设置的不显示
+// 列表/看板/速查中仅显示单字（取全称首字），悬停可见全称；弹窗下拉仍为完整名称
+function companyTagsHtml(r){
+  return ['ownership','scale','industry']
+    .map(g => r && r[g] && COMPANY_TAG_LABELS[r[g]])
+    .filter(Boolean)
+    .map(t => `<span class="co-tag" style="background:${t.color}1f;color:${t.color};border:1px solid ${t.color}55" title="${t.label}">${t.label.slice(0, 1)}</span>`)
+    .join('');
+}
 
 /* ================= 工具函数 ================= */
 const $ = id => document.getElementById(id);
@@ -652,7 +704,12 @@ function seasonTag(item){
   const season = seasonOf(item);
   return '<span class="season-tag ' + season + '">' + seasonLabel(season) + '</span>';
 }
-function normalizeRecords(records){ return records.map(r => ({...r, season: seasonOf(r)})); }
+function normalizeRecords(records){ return records.map(r => ({
+  ...r, season: seasonOf(r),
+  ownership: COMPANY_TAG_LABELS[r.ownership] ? r.ownership : '',
+  scale: COMPANY_TAG_LABELS[r.scale] ? r.scale : '',
+  industry: COMPANY_TAG_LABELS[r.industry] ? r.industry : '',
+})); }
 function seasonRecords(){ return state.records.filter(r => state.season === 'all' || seasonOf(r) === state.season); }
 function actionSeason(){ return $('mask').classList.contains('show') ? $('f_season').value : (state.season === 'spring' ? 'spring' : 'autumn'); }
 
@@ -932,7 +989,7 @@ function renderQuickDrop(){
   const recordHtml = hits.map(r => {
     const st = statusByKey(r.status);
     return `<div class="qd-item" data-id="${r.id}" title="点击定位到该条记录">
-      <span class="qd-co">${esc(r.company)}${seasonTag(r)}</span>
+      <span class="qd-co">${companyTagsHtml(r)}${esc(r.company)}${seasonTag(r)}</span>
       <span class="qd-pos">${esc(r.position)}${r.city ? ' · ' + esc(r.city) : ''}</span>
       <span class="pill" style="background:${st.color}1c;color:${st.color}">${st.label}</span>
     </div>`;
@@ -1211,7 +1268,7 @@ function renderList(){
       return `
       <tr class="data-row" data-id="${r.id}">
         <td><button class="star-btn ${r.star ? 'on' : ''}" data-act="star" title="重点关注">${r.star ? '★' : '☆'}</button></td>
-        <td class="company-cell">${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
+        <td class="company-cell">${companyTagsHtml(r)}${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}${r.link ? ` <a href="${esc(r.link)}" target="_blank" title="打开投递链接" onclick="event.stopPropagation()">🔗</a>` : ''}</td>
         <td class="pos-cell">${esc(r.position)}</td>
         <td class="small">${esc(r.category || '—')}</td>
         <td class="small">${esc(r.city || '—')}</td>
@@ -1280,7 +1337,7 @@ function renderBoard(){
         ${cards.map(r => `
         <div class="k-card" draggable="true" data-id="${r.id}">
           <div class="k-top">
-            <span class="k-company">${r.star ? '⭐ ' : ''}${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}</span>
+            <span class="k-company">${r.star ? '⭐ ' : ''}${companyTagsHtml(r)}${esc(r.company)}${seasonTag(r)}${companyFlagBadge(r.company, seasonOf(r))}</span>
             <span class="k-edit" data-act="edit">✏️</span>
           </div>
           <div class="k-pos">${esc(r.position)}</div>
@@ -1429,6 +1486,9 @@ function openModal(id){
     $('f_season').value = seasonOf(r);
     $('f_company').value = r.company || '';
     $('f_position').value = r.position || '';
+    $('f_ownership').value = COMPANY_TAG_LABELS[r.ownership] ? r.ownership : '';
+    $('f_scale').value = COMPANY_TAG_LABELS[r.scale] ? r.scale : '';
+    $('f_industry').value = COMPANY_TAG_LABELS[r.industry] ? r.industry : '';
     $('f_category').value = r.category || CATEGORIES[0];
     cityTags = String(r.city || '').split(/\s*[/、,，]\s*/).map(s => s.trim()).filter(Boolean);
     $('f_channel').value = r.channel || CHANNELS[0];
@@ -1556,6 +1616,9 @@ function bind(){
   $('fChannel').innerHTML += CHANNELS.map(c => `<option>${c}</option>`).join('');
   $('f_category').innerHTML = CATEGORIES.map(c => `<option>${c}</option>`).join('');
   $('f_channel').innerHTML = CHANNELS.map(c => `<option>${c}</option>`).join('');
+  $('f_ownership').innerHTML = '<option value="">所有权—</option>' + COMPANY_TAGS.ownership.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  $('f_scale').innerHTML = '<option value="">规模—</option>' + COMPANY_TAGS.scale.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  $('f_industry').innerHTML = '<option value="">行业类别—</option>' + COMPANY_TAGS.industry.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
   $('f_status').innerHTML = STATUSES.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
 
   $('seasonSwitch').addEventListener('click', e => {
@@ -1772,6 +1835,9 @@ function bind(){
       company: $('f_company').value.trim(),
       position: $('f_position').value.trim(),
       category: $('f_category').value,
+      ownership: $('f_ownership').value,
+      scale: $('f_scale').value,
+      industry: $('f_industry').value,
       city: cityTags.join(' / '),
       channel: $('f_channel').value,
       applyDate: $('f_applyDate').value || todayStr(),
