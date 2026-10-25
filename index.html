@@ -1137,10 +1137,11 @@ function renderTrend(){
 }
 
 function nextBadge(r){
-  // 已挂的公司：该列显示备注内容（一般为挂因），无备注时维持原样
-  if(r.status === 'rejected' && String(r.note || '').trim()){
+  // 已挂/已放弃的公司：该列显示备注内容（一般为挂因/弃因），无备注时维持原样
+  const prefix = { rejected: '挂因', declined: '弃因' }[r.status];
+  if(prefix && String(r.note || '').trim()){
     const reason = String(r.note).trim().split('\n')[0];
-    return `<span class="reason-cell" title="${esc(String(r.note).trim())}">挂因：${esc(reason)}</span>`;
+    return `<span class="reason-cell" title="${esc(String(r.note).trim())}">${prefix}：${esc(reason)}</span>`;
   }
   if(!r.nextTime) return '<span class="muted small">—</span>';
   const ts = new Date(r.nextTime).getTime();
