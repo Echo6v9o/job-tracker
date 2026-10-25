@@ -1381,6 +1381,9 @@ function historyAfterStatusChange(r, key, note){
   const next = targetOrder === undefined
     ? history.slice()
     : history.filter(h => {
+        // 已挂与已放弃互斥：时间线中只保留其中一个，切换时替换
+        if((key === 'rejected' && h.status === 'declined') ||
+           (key === 'declined' && h.status === 'rejected')) return false;
         const order = STATUS_ORDER.get(h.status);
         return order === undefined || order <= targetOrder;
       });
