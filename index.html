@@ -1408,13 +1408,20 @@ function changeStatus(id, key){
   toast(`${r.company} → ${st.label}`);
 }
 
+// 按北京时间判断当前招聘批次：7–12 月为秋招，1–6 月为春招
+function currentSeasonByBeijingTime(){
+  const bj = new Date(Date.now() + (new Date().getTimezoneOffset() + 480) * 60000);
+  const m = bj.getMonth() + 1;
+  return (m >= 7 && m <= 12) ? 'autumn' : 'spring';
+}
+
 function openModal(id){
   const f = $('form');
   f.reset();
   $('dupHint').innerHTML = '';
   $('f_id').value = id || '';
   $('f_applyDate').value = todayStr();
-  $('f_season').value = state.season === 'spring' ? 'spring' : 'autumn';
+  $('f_season').value = currentSeasonByBeijingTime();   // 新增时按北京时间自动预选，仍可手动更改
   if(id){
     const r = findRec(id);
     if(!r) return;
