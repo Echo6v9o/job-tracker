@@ -316,7 +316,7 @@ textarea{resize:vertical;min-height:64px}
     <div class="stat-card"><div class="num" id="s_total" style="color:#4f46e5">0</div><div class="lbl">总投递</div></div>
     <div class="stat-card"><div class="num" id="s_active" style="color:#0284c7">0</div><div class="lbl">进行中</div></div>
     <div class="stat-card"><div class="num" id="s_interview" style="color:#7c3aed">0</div><div class="lbl">面试中</div></div>
-    <div class="stat-card"><div class="num" id="s_offer" style="color:#059669">0</div><div class="lbl">Offer</div></div>
+    <div class="stat-card"><div class="num" id="s_offer" style="color:#059669">0</div><div class="lbl">累计拿到 Offer</div></div>
     <div class="stat-card"><div class="num" id="s_rej" style="color:#dc2626">0</div><div class="lbl">已挂</div></div>
   </div>
 
@@ -468,7 +468,7 @@ textarea{resize:vertical;min-height:64px}
 'use strict';
 /* ================= 基础配置 ================= */
 const STORAGE_KEY = 'qiuzhao.tracker.v1';
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.4.1';
 const APP_REPOSITORY_URL = 'https://github.com/Echo6v9o/job-tracker';
 const APP_UPDATE_SOURCE_URL = 'https://raw.githubusercontent.com/Echo6v9o/job-tracker/main/index.html';
 const APP_UPDATE_CHECK_INTERVAL = 30 * 60e3;
@@ -592,6 +592,9 @@ function download(content, filename, type){
 // 终态记录保留曾经到达过的漏斗阶段，避免已挂/已放弃后转化数据归零
 function reached(r, keys){
   return keys.some(k => r.status === k || (r.history || []).some(h => h.status === k));
+}
+function hasReceivedOffer(r){
+  return r.status === 'offer' || (HISTORICAL_FUNNEL_STATUSES.has(r.status) && reached(r, ['offer']));
 }
 /* ================= 版本更新检查 =================
  * 当前页面携带 APP_VERSION，远端 main 分支的 index.html 作为最新版本来源。
@@ -1112,7 +1115,7 @@ function renderStats(){
   $('s_total').textContent = rs.length;
   $('s_active').textContent = rs.filter(r => !TERMINAL.has(r.status)).length;
   $('s_interview').textContent = rs.filter(r => interviewing.has(r.status)).length;
-  $('s_offer').textContent = rs.filter(r => r.status === 'offer').length;
+  $('s_offer').textContent = rs.filter(hasReceivedOffer).length;
   $('s_rej').textContent = rs.filter(r => r.status === 'rejected').length;
 }
 
@@ -1146,7 +1149,7 @@ function renderFunnel(){
   const nItv = seasonRecords().filter(r => HISTORICAL_FUNNEL_STATUSES.has(r.status)
     ? reached(r, FUNNEL_INTERVIEW_KEYS)
     : FUNNEL_INTERVIEW_STATUSES.has(r.status)).length;
-  const nOffer = seasonRecords().filter(r => r.status === 'offer').length;
+  const nOffer = seasonRecords().filter(hasReceivedOffer).length;
   const rows = [
     ['投递', n, '#6366f1'],
     ['进入测评/笔试/AI面', nEval, '#0ea5e9'],
@@ -1427,8 +1430,12 @@ function cityEnterKey(){
 function findRec(id){ return state.records.find(r => r.id === id); }
 
 function historyAfterStatusChange(r, key, note){
-  const history = Array.isArray(r.history) ? r.history : [];
-  const targetIndex = history.map(h => h.status).lastIndexOf(key);
+  let history = Array.isArray(r.history) ? r.history : [];
+  // 旧记录可能只有当前 Offer 状态，没有对应的时间线条目。
+  if(r.status === 'offer' && HISTORICAL_FUNNEL_STATUSES.has(key) && !history.some(h => h.status === 'offer')){
+    history = [...history, {status: 'offer', time: '', note: ''}];
+  }
+  const targetIndex = HISTORICAL_FUNNEL_STATUSES.has(key) ? -1 : history.map(h => h.status).lastIndexOf(key);
   if(targetIndex >= 0){
     const next = history.slice(0, targetIndex + 1);
     next[targetIndex] = {...next[targetIndex], time: nowStr(), note: note || ''};
@@ -1438,9 +1445,8 @@ function historyAfterStatusChange(r, key, note){
   const next = targetOrder === undefined
     ? history.slice()
     : history.filter(h => {
-        // 已挂与已放弃互斥：时间线中只保留其中一个，切换时替换
-        if((key === 'rejected' && h.status === 'declined') ||
-           (key === 'declined' && h.status === 'rejected')) return false;
+        // 结束流程时替换旧的结束状态，保留实际到达的阶段。
+        if(HISTORICAL_FUNNEL_STATUSES.has(key) && HISTORICAL_FUNNEL_STATUSES.has(h.status)) return false;
         const order = STATUS_ORDER.get(h.status);
         return order === undefined || order <= targetOrder;
       });
